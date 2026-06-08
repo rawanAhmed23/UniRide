@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة الوجهات والأسعار - لوحة الأدمن UniRide</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="dashboard.html">UniRide Admin 🛠️</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="dashboard.html">الإحصائيات</a>
+                <a class="nav-link" href="manage-drivers.html">إدارة السائقين</a>
+                <a class="nav-link active" href="destinations.html">الوجهات والأسعار</a>
+                <a class="nav-link" href="admin-chat.html">الشكاوى والمقترحات</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mb-5">
+        <h2 class="fw-bold mb-4">📍 إدارة الوجهات ومواعيد التحرك</h2>
+
+        <div class="row g-4">
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0 rounded-3">
+                    <div class="card-header bg-primary text-white fw-bold">
+                        <i class="fa-solid fa-plus-circle me-1"></i> إضافة وجهة جديدة
+                    </div>
+                    <div class="card-body">
+                        <form id="destinationForm">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">اسم الوجهة (Destination)</label>
+                                <input type="text" class="form-control" id="destName" placeholder="مثال: جامعة القاهرة، الشيخ زايد" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">نقطة الانطلاق الثابتة</label>
+                                <input type="text" class="form-control" value="الموقف الرئيسي للشركة" disabled>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">سعر الرحلة (ذهاب فقط) ج.م</label>
+                                <input type="number" class="form-control" id="destPrice" placeholder="مثال: 50" required>
+                                <div class="form-text text-muted">سيقوم النظام بضرب السعر في 2 تلقائياً عند اختيار الطالب لرحلة (ذهاب وعودة).</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">مواعيد التحرك المتاحة</label>
+                                <input type="text" class="form-control" id="destTimes" placeholder="مثال: 07:30 ص، 04:00 م" required>
+                                <div class="form-text text-muted">افصل بين المواعيد بفاصلة (،) لكي تظهر منفصلة للطالب.</div>
+                            </div>
+                            <button type="submit" class="btn btn-success w-100 py-2 fw-bold">
+                                <i class="fa-solid fa-floppy-disk me-1"></i> حفظ الوجهة في النظام
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0 rounded-3">
+                    <div class="card-header bg-dark text-white fw-bold">
+                        <i class="fa-solid fa-map-location-dot me-1"></i> قائمة الوجهات المتاحة حالياً
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 text-center">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>الوجهة</th>
+                                    <th>نقطة الانطلاق</th>
+                                    <th>سعر الذهاب</th>
+                                    <th>المواعيد المتاحة</th>
+                                    <th>الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="destinationsTableBody">
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { db } from "../js/firebase-config.js";
+        import { collection, addDoc, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const destinationForm = document.getElementById("destinationForm");
+        const tableBody = document.getElementById("destinationsTableBody");
+
+        // دالة جلب وعرض الوجهات
+        async function fetchDestinations() {
+            tableBody.innerHTML = "<tr><td colspan='5'>جاري تحميل الوجهات...</td></tr>";
+            try {
+                const querySnapshot = await getDocs(collection(db, "destinations"));
+                tableBody.innerHTML = "";
+                
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td class="fw-bold text-dark">${data.name}</td>
+                        <td><span class="badge bg-secondary">الموقف الثابت</span></td>
+                        <td class="text-success fw-bold">${data.price} ج.م</td>
+                        <td><span class="text-muted small">${data.times}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-danger delete-btn" data-id="${docSnap.id}">
+                                <i class="fa-solid fa-trash-can"></i> حذف
+                            </button>
+                        </td>
+                    `;
+                    tableBody.appendChild(tr);
+
+                    // ربط زر الحذف بالـ Firestore
+                    tr.querySelector(".delete-btn").addEventListener("click", () => deleteDestination(docSnap.id));
+                });
+            } catch (error) {
+                console.error("Error: ", error);
+            }
+        }
+
+        // إضافة وجهة جديدة
+        if (destinationForm) {
+            destinationForm.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const name = document.getElementById("destName").value;
+                const price = parseFloat(document.getElementById("destPrice").value);
+                const times = document.getElementById("destTimes").value;
+
+                try {
+                    await addDoc(collection(db, "destinations"), {
+                        name,
+                        price,
+                        times,
+                        createdAt: new Date()
+                    });
+                    alert("تم حفظ الوجهة والأسعار بنجاح في الفايربيز!");
+                    destinationForm.reset();
+                    fetchDestinations();
+                } catch (err) {
+                    alert("خطأ في حفظ البيانات: " + err.message);
+                }
+            });
+        }
+
+        // دالة حذف وجهة
+        async function deleteDestination(id) {
+            if (confirm("هل أنت متأكد من حذف هذه الوجهة؟ سيؤثر ذلك على الحجوزات المرتبطة بها.")) {
+                try {
+                    await deleteDoc(doc(db, "destinations", id));
+                    alert("تم حذف الوجهة بنجاح.");
+                    fetchDestinations();
+                } catch (err) {
+                    alert("خطأ في الحذف: " + err.message);
+                }
+            }
+        }
+
+        // تشغيل الجلب أول ما الصفحة تفتح
+        fetchDestinations();
+    </script>
+</body>
+</html>

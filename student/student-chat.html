@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الدعم الفني والشكاوى - UniRide</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        .chat-box {
+            height: 400px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+        }
+        .msg {
+            max-width: 75%;
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 15px;
+        }
+        .msg-student {
+            background-color: #0d6efd;
+            color: white;
+            margin-right: auto; /* محاذاة لليسار لأنها رسالة الطالب المرسلة */
+            border-bottom-left-radius: 2px;
+        }
+        .msg-admin {
+            background-color: #e9ecef;
+            color: #212529;
+            margin-left: auto; /* محاذاة لليمين لأنها رد الأدمن */
+            border-bottom-right-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="book-trip.html">UniRide الدعم 🎓</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="book-trip.html">حجز رحلة</a>
+                <a class="nav-link active" href="student-chat.html">الدعم والشكاوى</a>
+                <button class="btn btn-sm btn-danger ms-3" id="logoutBtn">تسجيل خروج</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow-sm border-0 rounded-3">
+                    <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center">
+                        <span><i class="fa-solid fa-comments me-2"></i>محادثة الدعم الفني المباشر</span>
+                        <span class="badge bg-secondary small" id="studentNameBadge">جاري التعرف عليك...</span>
+                    </div>
+                    
+                    <div class="card-body chat-box d-flex flex-column p-3" id="chatContainer">
+                        <div class="text-center text-muted my-auto" id="loadingChat">
+                            <i class="fa-solid fa-spinner fa-spin fa-2x mb-2"></i>
+                            <p>جاري فتح قناة الاتصال الآمنة...</p>
+                        </div>
+                    </div>
+
+                    <div class="card-footer bg-white border-top-0 p-3">
+                        <form id="chatForm" class="d-flex gap-2">
+                            <input type="text" id="messageInput" class="form-select form-control" placeholder="اكتب شكوتك أو استفسارك هنا..." required disabled>
+                            <button type="submit" class="btn btn-primary px-4 fw-bold" id="sendBtn" disabled>
+                                <i class="fa-solid fa-paper-plane"></i> إرسال
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <p class="text-center text-muted small mt-2">تصل هذه الرسائل مباشرةً إلى لوحة تحكم الأدمن للمتابعة الفورية.</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { db, auth } from "../js/firebase-config.js";
+        import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { collection, addDoc, query, where, orderBy, onSnapshot, getDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const chatContainer = document.getElementById("chatContainer");
+        const loadingChat = document.getElementById("loadingChat");
+        const messageInput = document.getElementById("messageInput");
+        const sendBtn = document.getElementById("sendBtn");
+        const chatForm = document.getElementById("chatForm");
+        const studentNameBadge = document.getElementById("studentNameBadge");
+        const logoutBtn = document.getElementById("logoutBtn");
+
+        let currentStudentUid = null;
+        let studentName = "طالب";
+
+        // 1. مراقبة حالة جلسة الطالب وجلب اسمه من الفايرستور
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                window.location.href = "../auth/login.html";
+            } else {
+                currentStudentUid = user.uid;
+                
+                // جلب اسم الطالب الحقيقي لعرضه في البيدج وربطه بالرسائل
+                try {
+                    const userDoc = await getDoc(doc(db, "users", user.uid));
+                    if (userDoc.exists()) {
+                        studentName = userDoc.data().name || "طالب";
+                        studentNameBadge.textContent = studentName;
+                    }
+                } catch (err) { console.error(err); }
+
+                // تفعيل المدخلات وتشغيل الاستماع الحي للمحادثة الخاصة بهذا الطالب
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+                listenToChat();
+            }
+        });
+
+        // 2. الاستماع الحي للمحادثة (Real-time listener)
+        function listenToChat() {
+            // جلب الرسائل الخاصة بالطالب الحالي فقط ومرتبة زمنياً تصاعدياً
+            const q = query(
+                collection(db, "support_chats"),
+                where("studentUid", "==", currentStudentUid),
+                orderBy("createdAt", "asc")
+            );
+
+            onSnapshot(q, (snapshot) => {
+                // إخفاء مؤشر التحميل عند استقبال البيانات الأولى
+                if (loadingChat) loadingChat.remove();
+                
+                chatContainer.innerHTML = "";
+
+                if (snapshot.empty) {
+                    chatContainer.innerHTML = `
+                        <div class="text-center text-muted my-auto" id="noMessages">
+                            <i class="fa-solid fa-comment-medical fa-2x mb-2 text-primary"></i>
+                            <p class="mb-0">لا توجد رسائل سابقة. أرسل استفسارك وسيقوم الأدمن بالرد عليك.</p>
+                        </div>`;
+                    return;
+                }
+
+                snapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const msgDiv = document.createElement("div");
+                    
+                    // تحديد ستايل ومكان الرسالة بناءً على من أرسلها (الطالب أم الأدمن)
+                    if (data.sender === "student") {
+                        msgDiv.className = "msg msg-student";
+                        msgDiv.textContent = data.message;
+                    } else {
+                        msgDiv.className = "msg msg-admin";
+                        msgDiv.innerHTML = `<strong>الأدمن:</strong> <br> ${data.message}`;
+                    }
+
+                    chatContainer.appendChild(msgDiv);
+                });
+
+                // النزول التلقائي لأسفل صندوق الشات لمشاهدة آخر الرسائل المرسلة
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }, (error) => {
+                console.error("Chat error:", error);
+            });
+        }
+
+        // 3. معالجة إرسال رسالة جديدة للـ Firestore
+        if (chatForm) {
+            chatForm.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const msgText = messageInput.value.trim();
+                if (!msgText) return;
+
+                try {
+                    await addDoc(collection(db, "support_chats"), {
+                        studentUid: currentStudentUid,
+                        studentName: studentName,
+                        message: msgText,
+                        sender: "student", // لتحديد أن الطالب هو الراسل
+                        createdAt: new Date() // ترتيب الطابع الزمني
+                    });
+
+                    messageInput.value = ""; // تنظيف حقل الإدخال بعد الإرسال بنجاح
+                } catch (err) {
+                    alert("فشل إرسال الرسالة: " + err.message);
+                }
+            });
+        }
+
+        // تسجيل الخروج
+        if (logoutBtn) {
+            logoutBtn.addEventListener("click", () => {
+                signOut(auth).then(() => window.location.href = "../auth/login.html");
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniRide - منصة نقل وتوصيل الطلاب الأولى</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold fs-3" href="#">
+                <i class="fa-solid fa-bus me-2 text-primary"></i>UniRide
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0 fw-semibold">
+                    <li class="nav-item"><a class="nav-link active" href="#">الرئيسية</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#features">المميزات</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#about">عن المنصة</a></li>
+                </ul>
+                <div class="d-flex gap-2">
+                    <a href="auth/login.html" class="btn btn-outline-light px-4">تسجيل الدخول</a>
+                    <a href="auth/signup.html" class="btn btn-primary px-4">حساب طالب جديد</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <header class="bg-white text-dark py-5 border-bottom">
+        <div class="container my-5">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-6 text-center text-lg-start">
+                    <span class="badge bg-primary-subtle text-primary mb-3 px-3 py-2 rounded-pill fw-bold">حجز ذكي .. وصول آمن</span>
+                    <h1 class="display-4 fw-bold mb-3 text-dark">رحلتك الجامعية اليومية أصبحت أسهل مع <span class="text-primary">UniRide</span></h1>
+                    <p class="lead text-muted mb-4">
+                        المنصة المتكاملة لإدارة توصيل الطلاب من مواقف الانطلاق الثابتة إلى وجهاتهم المختلفة. نوفر لك الأمان، الالتزام بالمواعيد، والتحكم الكامل في حجزك.
+                    </p>
+                    <div class="d-grid gap-3 d-md-flex justify-content-md-start">
+                        <a href="auth/signup.html" class="btn btn-primary btn-lg px-5 shadow-sm">اشترك الآن مجاناً</a>
+                        <a href="#features" class="btn btn-outline-secondary btn-lg px-4">اكتشف خدماتنا</a>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <img src="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=600" class="img-fluid rounded-4 shadow-lg w-100" alt="UniRide Bus">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="features" class="py-5 bg-light">
+        <div class="container">
+            <div class="text-center max-width-md mx-auto mb-5">
+                <h2 class="fw-bold mb-3">ليه تختار منصة UniRide؟</h2>
+                <p class="text-muted">نوفر بيئة متكاملة تضمن راحة الطالب وجودة العمل للشركة والسائقين.</p>
+            </div>
+            
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="p-4 bg-white rounded-4 shadow-sm h-100 text-center border border-light transition-hover">
+                        <div class="bg-primary-subtle text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-4" style="width: 70px; height: 70px;">
+                            <i class="fa-solid fa-route fs-2"></i>
+                        </div>
+                        <h4 class="fw-bold mb-3">وجهات محددة وأسعار ثابتة</h4>
+                        <p class="text-muted mb-0">نقطة انطلاق ثابتة من الموقف، مع تحديد دقيق للوجهات والأسعار مسبقاً من الإدارة بدون أي استغلال.</p>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="p-4 bg-white rounded-4 shadow-sm h-100 text-center border border-light transition-hover">
+                        <div class="bg-success-subtle text-success rounded-circle d-inline-flex align-items-center justify-content-center mb-4" style="width: 70px; height: 70px;">
+                            <i class="fa-solid fa-star fs-2"></i>
+                        </div>
+                        <h4 class="fw-bold mb-3">تقييم مستمر للسائقين</h4>
+                        <p class="text-muted mb-0">نظام تقييم بالنجوم وشات مخصص لتقديم المقترحات والشكاوى مباشرة للأدمن لضمان تجربة آمنة ومريحة.</p>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="p-4 bg-white rounded-4 shadow-sm h-100 text-center border border-light transition-hover">
+                        <div class="bg-warning-subtle text-warning rounded-circle d-inline-flex align-items-center justify-content-center mb-4" style="width: 70px; height: 70px;">
+                            <i class="fa-solid fa-wallet fs-2"></i>
+                        </div>
+                        <h4 class="fw-bold mb-3">حسابات مرنة وتكلفة عادلة</h4>
+                        <p class="text-muted mb-0">اختر رحلتك (ذهاب فقط، عودة فقط، أو ذهاب وعودة) ليتم احتساب التكلفة بدقة، مع نظام مالي ذكي لمتابعة رواتب السائقين.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="about" class="py-5 bg-white">
+        <div class="container py-4">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-6 order-last order-lg-first">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="p-4 bg-light rounded-3 text-center">
+                                <h3 class="fw-bold text-primary mb-1">100%</h3>
+                                <p class="text-muted mb-0">أمان وخصوصية</p>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-4 bg-light rounded-3 text-center">
+                                <h3 class="fw-bold text-success mb-1">+40</h3>
+                                <p class="text-muted mb-0">رحلة شهرياً مستهدفة</p>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-4 bg-light rounded-3 text-center">
+                                <h3 class="fw-bold text-warning mb-1">24/7</h3>
+                                <p class="text-muted mb-0">دعم عبر الشات</p>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-4 bg-light rounded-3 text-center">
+                                <h3 class="fw-bold text-info mb-1">ثابت</h3>
+                                <p class="text-muted mb-0">موقف الانطلاق</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <h2 class="fw-bold mb-4">تنظيم احترافي للنقل الجماعي الجامعي</h2>
+                    <p class="text-muted mb-3">
+                        يسعى نظام **UniRide** إلى حل مشاكل التكدس وضياع المواعيد لدى الطلاب، من خلال ربط الأدمن بالطالب والسائق مباشرة. 
+                    </p>
+                    <p class="text-muted mb-4">
+                        التحكم الكامل للأدمن في لوحة القيادة يضمن إضافة السائقين بعرباتهم (ملاكي أو تربو)، رصد الحضور والغياب للرحلات، ومتابعة إيرادات الشركة ورواتب السائقين المعتمدة على حجم الإنجاز الفعلي.
+                    </p>
+                    <a href="auth/signup.html" class="btn btn-outline-primary px-4 fw-bold">ابدأ تجربتك الرقمية الآن</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="bg-dark text-white text-center py-4">
+        <div class="container">
+            <p class="mb-2 fw-semibold">UniRide 🚌 - نظام إدارة وتوصيل الطلاب الذكي</p>
+            <p class="mb-0 text-secondary" style="font-size: 0.9rem;">جميع الحقوق محفوظة &copy; مشروع كابستون 2026</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
