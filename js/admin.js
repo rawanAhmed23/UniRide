@@ -1,9 +1,10 @@
 import { db, firebaseConfig } from "./firebase-config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { checkAccess } from "../js/auth-guard.js";
 checkAccess("admin"); // لن يفتح الصفحة إلا لو كان أدمن فعلاً
+
 // إنشاء تطبيق فايربيز ثانوي مخصص لتكريت حسابات السائقين بدون تسجيل خروج الأدمن
 const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
 const secondaryAuth = getAuth(secondaryApp);
@@ -16,13 +17,55 @@ const cancelEditBtn = document.getElementById("cancelEditBtn");
 const formTitle = document.getElementById("formTitle");
 const destTableBody = document.getElementById("destinationsTableBody");
 const destinationForm = document.getElementById("destinationForm");
+const assignedDestinationSelect = document.getElementById("assignedDestination"); 
+
+
+const logoutBtn = document.getElementById('logoutBtn');
+
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+        const auth = getAuth();
+        
+        signOut(auth).then(() => {
+            // تسجيل خروج ناجح
+            console.log("تم تسجيل الخروج بنجاح");
+            // تحويل المستخدم إلى صفحة تسجيل الدخول
+            window.location.href = "../auth/login.html"; 
+        }).catch((error) => {
+            // حدث خطأ
+            console.error("حدث خطأ أثناء تسجيل الخروج:", error);
+            alert("فشل تسجيل الخروج، حاول مرة أخرى.");
+        });
+    });
+}
+
+// ==========================================
+// دالة لجلب خطوط السير ووضعها في الـ Dropdown ديناميكياً
+// ==========================================
+async function populateDestinationsDropdown() {
+    if (!assignedDestinationSelect) return;
+    try {
+        const querySnapshot = await getDocs(collection(db, "destinations"));
+        assignedDestinationSelect.innerHTML = '<option value="" selected disabled>اختر الوجهة الثابتة...</option>';
+        
+        querySnapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            const option = document.createElement("option");
+            option.value = data.name; 
+            option.textContent = data.name;
+            assignedDestinationSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error("Error loading destinations for dropdown: ", error);
+    }
+}
 
 // ==========================================
 // 1. الجزء الخاص بإدارة السائقين (Drivers CRUD)
 // ==========================================
 async function fetchDrivers() {
-    if (!driversTableBody) return; // تأمين العمليات: لو مش في صفحة السائقين اخرج
-    driversTableBody.innerHTML = "<tr><td colspan='6'>جاري تحميل البيانات...</td></tr>";
+    if (!driversTableBody) return; 
+    driversTableBody.innerHTML = "<tr><td colspan='7'>جاري تحميل البيانات...</td></tr>"; 
     try {
         const querySnapshot = await getDocs(collection(db, "users"));
         driversTableBody.innerHTML = "";
@@ -35,6 +78,7 @@ async function fetchDrivers() {
                     <td>${data.name || 'غير مسجل'}</td>
                     <td>${data.carType || 'ملاكي'} (${data.carModel || '2024'})</td>
                     <td><span class="badge bg-secondary">${data.plateNumber || '---'}</span></td>
+                    <td><span class="badge bg-info text-dark">${data.assignedDestination || 'لم يتم التعيين'}</span></td> 
                     <td>${data.baseSalary || 0} ج.م</td>
                     <td>${data.driverLicenseExpiry || '---'}</td>
                     <td>
@@ -69,6 +113,10 @@ function startEdit(id, data) {
     document.getElementById("driverLicenseExpiry").value = data.driverLicenseExpiry || '';
     document.getElementById("carLicenseExpiry").value = data.carLicenseExpiry || '';
     document.getElementById("baseSalary").value = data.baseSalary || '';
+    
+    if (assignedDestinationSelect) {
+        assignedDestinationSelect.value = data.assignedDestination || ''; 
+    }
 }
 
 if (cancelEditBtn && driverForm && formTitle && submitBtn) {
@@ -96,29 +144,32 @@ if (driverForm) {
         const driverLicenseExpiry = document.getElementById("driverLicenseExpiry").value;
         const carLicenseExpiry = document.getElementById("carLicenseExpiry").value;
         const baseSalary = document.getElementById("baseSalary").value;
+        const assignedDestination = assignedDestinationSelect ? assignedDestinationSelect.value : ""; 
 
         if (id) {
             try {
                 await updateDoc(doc(db, "users", id), {
-                    name, nationalId, carType, carModel, plateNumber,
+                    name, nationalId, carType, carModel, plateNumber, assignedDestination, 
                     maxPassengers: parseInt(maxPassengers), driverLicenseExpiry, carLicenseExpiry, baseSalary: parseFloat(baseSalary)
                 });
-                alert("تم تحديث بيانات السائق بنجاح!");
+                alert("تم تحديث بيانات السائق والخط بنجاح!");
                 cancelEditBtn.click();
                 fetchDrivers();
             } catch (err) { alert("خطأ في التحديث: " + err.message); }
         } else {
             try {
+                // استخدام الـ secondaryAuth لمنع خروج الأدمن الحالي
                 const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, nationalId);
                 const user = userCredential.user;
 
+                // التخزين في كوليكشن users الموحد الذي يعتمد عليه كود الـ Login
                 await setDoc(doc(db, "users", user.uid), {
                     uid: user.uid, name, nationalId, email, carType, carModel, plateNumber,
                     maxPassengers: parseInt(maxPassengers), driverLicenseExpiry, carLicenseExpiry, baseSalary: parseFloat(baseSalary),
-                    monthlyTripsCount: 0, assignedDestination: "", role: "driver", createdAt: new Date()
+                    monthlyTripsCount: 0, assignedDestination: assignedDestination, role: "driver", createdAt: new Date() 
                 });
 
-                alert("تم إنشاء حساب السائق! الباسورد هو الرقم القومي.");
+                alert("تم إنشاء حساب السائق وتعيين الخط! الباسورد هو الرقم القومي.");
                 driverForm.reset();
                 fetchDrivers();
             } catch (err) { alert("خطأ أثناء إضافة السائق: " + err.message); }
@@ -140,7 +191,7 @@ async function deleteDriver(id) {
 // 2. الجزء الخاص بالوجهات والأسعار (Destinations)
 // ==========================================
 async function fetchDestinations() {
-    if (!destTableBody) return; // تأمين العمليات: لو مش في صفحة الوجهات اخرج
+    if (!destTableBody) return; 
     destTableBody.innerHTML = "<tr><td colspan='5'>جاري تحميل الوجهات...</td></tr>";
     try {
         const querySnapshot = await getDocs(collection(db, "destinations"));
@@ -153,7 +204,7 @@ async function fetchDestinations() {
                 <td class="fw-bold">${data.name}</td>
                 <td><span class="badge bg-secondary">الموقف الثابت</span></td>
                 <td class="text-success fw-bold">${data.price} ج.م</td>
-                <td><span class="text-muted small">${data.times}</span></td>
+                <td><span class="text-muted small">${data.times || '---'}</span></td>
                 <td><button class="btn btn-sm btn-outline-danger delete-dest-btn">حذف</button></td>
             `;
             destTableBody.appendChild(tr);
@@ -181,7 +232,7 @@ if (destinationForm) {
 async function deleteDestination(id) {
     if (confirm("هل تريد حذف هذه الوجهة؟")) {
         try {
-            await deleteDoc(doc(db, "destinations", id));
+            await deleteDoc(doc(doc(db, "destinations", id)));
             alert("تم الحذف.");
             fetchDestinations();
         } catch (err) { alert(err.message); }
@@ -192,7 +243,7 @@ async function deleteDestination(id) {
 // 3. الإحصائيات والرسوم البيانية والماليات (Dashboard)
 // ==========================================
 async function initDashboard() {
-    if (!document.getElementById("studentsChart")) return; // تأمين العمليات: لو مش في صفحة الـ Dashboard اخرج
+    if (!document.getElementById("studentsChart")) return; 
     
     try {
         const usersSnapshot = await getDocs(collection(db, "users"));
@@ -204,16 +255,16 @@ async function initDashboard() {
         let totalDriversSalarySum = 0;
         let destinationStats = {};
 
-        destinationsSnapshot.forEach(doc => {
-            destinationStats[doc.data().name] = { students: 0, drivers: 0 };
+        destinationsSnapshot.forEach(docSnap => {
+            destinationStats[docSnap.data().name] = { students: 0, drivers: 0 };
         });
 
-        usersSnapshot.forEach(doc => {
-            const user = doc.data();
+        usersSnapshot.forEach(docSnap => {
+            const user = docSnap.data();
             if (user.role === "driver") {
                 const trips = user.monthlyTripsCount || 0;
                 let finalSalary = user.baseSalary || 0;
-                if (trips < 40) finalSalary = finalSalary * 0.95; // خصم 5% لو الرحلات أقل من 40
+                if (trips < 40) finalSalary = finalSalary * 0.95; 
                 totalDriversSalarySum += finalSalary;
 
                 if (user.assignedDestination && destinationStats[user.assignedDestination]) {
@@ -222,9 +273,10 @@ async function initDashboard() {
             }
         });
 
-        bookingsSnapshot.forEach(doc => {
-            const booking = doc.data();
+        bookingsSnapshot.forEach(docSnap => {
+            const booking = docSnap.data();
             totalRevenueSum += booking.totalCost || 0;
+            // تعديل السطر ده هنا منِعاً للـ Crash الاستباقي للوحة الإحصائيات:
             if (booking.destination && destinationStats[booking.destination]) {
                 destinationStats[booking.destination].students += 1;
             }
@@ -238,7 +290,6 @@ async function initDashboard() {
         const studentsData = labels.map(k => destinationStats[k].students);
         const driversData = labels.map(k => destinationStats[k].drivers);
 
-        // إنشاء رسم بياني للطلاب
         new Chart(document.getElementById('studentsChart').getContext('2d'), {
             type: 'bar',
             data: {
@@ -248,7 +299,6 @@ async function initDashboard() {
             options: { responsive: true, maintainAspectRatio: false }
         });
 
-        // إنشاء رسم بياني للسائقين
         new Chart(document.getElementById('driversChart').getContext('2d'), {
             type: 'pie',
             data: {
@@ -261,9 +311,18 @@ async function initDashboard() {
     } catch (error) { console.error("Dashboard error: ", error); }
 }
 
-// تشغيل الدوال بذكاء حسب الصفحة المفتوحة
-document.addEventListener("DOMContentLoaded", () => {
-    fetchDrivers();
-    fetchDestinations();
-    initDashboard();
+// تشغيل الدوال بذكاء حسب عناصر الصفحة الحالية لتجنب أخطاء المتصفح
+document.addEventListener("DOMContentLoaded", async () => {
+    if (assignedDestinationSelect) {
+        await populateDestinationsDropdown();
+    }
+    if (driversTableBody) {
+        fetchDrivers();
+    }
+    if (destTableBody) {
+        fetchDestinations();
+    }
+    if (document.getElementById("studentsChart")) {
+        initDashboard();
+    }
 });

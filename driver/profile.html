@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الملف الشخصي للسائق - UniRide</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-success mb-4 shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="profile.html">لوحة السائق 🚍</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <div class="navbar-nav ms-auto">
+                    <a class="nav-link active" href="profile.html">الحساب الشخصي</a>
+                    <a class="nav-link" href="schedule.html">جدول الرحلات</a>
+                    <a class="nav-link" href="driver-history.html">سجل الرحلات</a>
+                    <a class="nav-link text-warning fw-bold" id="logoutBtn" href="#">تسجيل الخروج</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-3" id="alertContainer"></div>
+
+    <div class="container mb-5">
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm text-center bg-white p-4">
+                    <div class="my-3">
+                        <img src="https://ui-avatars.com/api/?name=Driver&background=198754&color=fff&size=100"
+                            class="rounded-circle shadow-sm" id="driverAvatar" alt="Driver">
+                    </div>
+                    <h3 class="fw-bold text-dark mb-1" id="profileDriverName">جاري التحميل...</h3>
+                    <p class="text-muted small mb-3" id="profileDriverEmail">---</p>
+                    <span class="badge bg-success px-3 py-2">كابتن معتمد رتبة سائق</span>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card border-0 shadow-sm bg-white p-4">
+                    <h4 class="fw-bold text-success mb-4"><i class="fa-solid fa-id-card me-2"></i> البيانات الشخصية
+                        والمهنية</h4>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="text-muted small">الرقم القومي</label>
+                            <p class="fs-5 fw-bold text-dark border-bottom pb-2" id="infoNationalId">---</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">المرتب الشهري الثابت</label>
+                            <p class="fs-5 fw-bold text-success border-bottom pb-2" id="infoSalary">--- ج.م</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">رقم لوحة المركبة</label>
+                            <p class="fs-5 fw-bold text-primary border-bottom pb-2" id="infoPlate">---</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">عدد الرحلات المنفذة هذا الشهر</label>
+                            <p class="fs-5 fw-bold text-dark border-bottom pb-2" id="infoTripsCount">0 رحلة</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small"><i class="fa-solid fa-calendar-days text-danger"></i> انتهاء
+                                رخصة القيادة</label>
+                            <p class="fs-5 fw-bold text-dark border-bottom pb-2" id="infoDriverLicense">---</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small"><i class="fa-solid fa-calendar-days text-danger"></i> انتهاء
+                                رخصة السيارة</label>
+                            <p class="fs-5 fw-bold text-dark border-bottom pb-2" id="infoCarLicense">---</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="licenseModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">تجديد الرخصة</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>الرجاء اختيار تاريخ الانتهاء الجديد:</p>
+                    <input type="date" id="newDateInput" class="form-control">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn btn-primary" id="saveDateBtn">حفظ التغييرات</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="../js/driver.js"></script>
+</body>
+
+</html>

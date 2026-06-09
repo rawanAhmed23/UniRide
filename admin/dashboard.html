@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="../css/style.css">
 </head>
+
 <body class="bg-light">
 
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 shadow-sm">
@@ -18,6 +20,12 @@
                 <a class="nav-link" href="manage-drivers.html">إدارة السائقين</a>
                 <a class="nav-link" href="destinations.html">الوجهات والأسعار</a>
                 <a class="nav-link" href="admin-chat.html">الشكاوى والمقترحات</a>
+                <div class="navbar-nav me-auto">
+                    <button id="logoutBtn" class="nav-link btn btn-link text-danger">
+                        <i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج
+                    </button>
+                </div>
+
             </div>
         </div>
     </nav>
@@ -64,7 +72,8 @@
         <div class="row g-4">
             <div class="col-md-6">
                 <div class="card border-0 shadow-sm p-4 rounded-3 bg-white">
-                    <h5 class="fw-bold text-dark mb-4"><i class="fa-solid fa-chart-bar text-primary me-2"></i>عدد الطلاب لكل وجهة (الأكثر طلباً)</h5>
+                    <h5 class="fw-bold text-dark mb-4"><i class="fa-solid fa-chart-bar text-primary me-2"></i>عدد الطلاب
+                        لكل وجهة (الأكثر طلباً)</h5>
                     <div style="position: relative; height:300px;">
                         <canvas id="studentsChart"></canvas>
                     </div>
@@ -73,7 +82,8 @@
 
             <div class="col-md-6">
                 <div class="card border-0 shadow-sm p-4 rounded-3 bg-white">
-                    <h5 class="fw-bold text-dark mb-4"><i class="fa-solid fa-chart-pie text-success me-2"></i>توزيع السائقين على الوجهات</h5>
+                    <h5 class="fw-bold text-dark mb-4"><i class="fa-solid fa-chart-pie text-success me-2"></i>توزيع
+                        السائقين على الوجهات</h5>
                     <div style="position: relative; height:300px;">
                         <canvas id="driversChart"></canvas>
                     </div>
@@ -84,6 +94,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <script type="module" src="../js/admin-dashboard.js"></script>
+    <script type="module" src="../js/admin.js"></script>
 </body>
+
 </html>

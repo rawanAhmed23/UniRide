@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,16 +9,23 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="../css/style.css">
 </head>
+
 <body class="bg-light">
 
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 shadow-sm">
         <div class="container">
             <a class="navbar-brand fw-bold" href="dashboard.html">UniRide Admin 🛠️</a>
             <div class="navbar-nav">
-                <a class="nav-link" href="dashboard.html">الإحصائيات</a>
+                <a class="nav-link active" href="dashboard.html">الإحصائيات</a>
                 <a class="nav-link" href="manage-drivers.html">إدارة السائقين</a>
-                <a class="nav-link active" href="destinations.html">الوجهات والأسعار</a>
+                <a class="nav-link" href="destinations.html">الوجهات والأسعار</a>
                 <a class="nav-link" href="admin-chat.html">الشكاوى والمقترحات</a>
+                <div class="navbar-nav me-auto">
+                    <button id="logoutBtn" class="nav-link btn btn-link text-danger">
+                        <i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج
+                    </button>
+                </div>
+
             </div>
         </div>
     </nav>
@@ -35,7 +43,8 @@
                         <form id="destinationForm">
                             <div class="mb-3">
                                 <label class="form-label fw-semibold">اسم الوجهة (Destination)</label>
-                                <input type="text" class="form-control" id="destName" placeholder="مثال: جامعة القاهرة، الشيخ زايد" required>
+                                <input type="text" class="form-control" id="destName"
+                                    placeholder="مثال: جامعة القاهرة، الشيخ زايد" required>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label fw-semibold">نقطة الانطلاق الثابتة</label>
@@ -43,13 +52,25 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label fw-semibold">سعر الرحلة (ذهاب فقط) ج.م</label>
-                                <input type="number" class="form-control" id="destPrice" placeholder="مثال: 50" required>
-                                <div class="form-text text-muted">سيقوم النظام بضرب السعر في 2 تلقائياً عند اختيار الطالب لرحلة (ذهاب وعودة).</div>
+                                <input type="number" class="form-control" id="destPrice" placeholder="مثال: 50"
+                                    required>
+                                <div class="form-text text-muted">سيقوم النظام بضرب السعر في 2 تلقائياً عند اختيار
+                                    الطالب لرحلة (ذهاب وعودة).</div>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label fw-semibold">مواعيد التحرك المتاحة</label>
-                                <input type="text" class="form-control" id="destTimes" placeholder="مثال: 07:30 ص، 04:00 م" required>
-                                <div class="form-text text-muted">افصل بين المواعيد بفاصلة (،) لكي تظهر منفصلة للطالب.</div>
+                                <label class="form-label fw-semibold">مواعيد الذهاب (من الموقف إلى الجامعة)</label>
+                                <input type="text" class="form-control" id="destGoTimes"
+                                    placeholder="مثال: 07:30 ص، 08:30 ص" required>
+                                <div class="form-text text-muted">افصل بين المواعيد بفاصلة (،) ليختار الطالب ميعاد
+                                    ذهابه.</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">مواعيد العودة (من الجامعة إلى الموقف)</label>
+                                <input type="text" class="form-control" id="destReturnTimes"
+                                    placeholder="مثال: 02:00 م، 04:00 م" required>
+                                <div class="form-text text-muted">افصل بين المواعيد بفاصلة (،) ليختار الطالب ميعاد
+                                    عودته.</div>
                             </div>
                             <button type="submit" class="btn btn-success w-100 py-2 fw-bold">
                                 <i class="fa-solid fa-floppy-disk me-1"></i> حفظ الوجهة في النظام
@@ -71,33 +92,55 @@
                                     <th>الوجهة</th>
                                     <th>نقطة الانطلاق</th>
                                     <th>سعر الذهاب</th>
-                                    <th>المواعيد المتاحة</th>
+                                    <th>مواعيد الذهاب</th>
+                                    <th>مواعيد العودة</th>
                                     <th>الإجراءات</th>
                                 </tr>
                             </thead>
                             <tbody id="destinationsTableBody">
-                                </tbody>
+                            </tbody>
                         </table>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+    <!-- <script type="module" src="../js/admin.js"></script> -->
 
     <script type="module">
+        import { getAuth, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { db } from "../js/firebase-config.js";
         import { collection, addDoc, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const destinationForm = document.getElementById("destinationForm");
         const tableBody = document.getElementById("destinationsTableBody");
 
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                const auth = getAuth();
+
+                signOut(auth).then(() => {
+                    // تسجيل خروج ناجح
+                    console.log("تم تسجيل الخروج بنجاح");
+                    // تحويل المستخدم إلى صفحة تسجيل الدخول
+                    window.location.href = "../auth/login.html";
+                }).catch((error) => {
+                    // حدث خطأ
+                    console.error("حدث خطأ أثناء تسجيل الخروج:", error);
+                    alert("فشل تسجيل الخروج، حاول مرة أخرى.");
+                });
+            });
+        }
+
         // دالة جلب وعرض الوجهات
         async function fetchDestinations() {
-            tableBody.innerHTML = "<tr><td colspan='5'>جاري تحميل الوجهات...</td></tr>";
+            tableBody.innerHTML = "<tr><td colspan='6'>جاري تحميل الوجهات...</td></tr>";
             try {
                 const querySnapshot = await getDocs(collection(db, "destinations"));
                 tableBody.innerHTML = "";
-                
+
                 querySnapshot.forEach((docSnap) => {
                     const data = docSnap.data();
                     const tr = document.createElement("tr");
@@ -105,7 +148,8 @@
                         <td class="fw-bold text-dark">${data.name}</td>
                         <td><span class="badge bg-secondary">الموقف الثابت</span></td>
                         <td class="text-success fw-bold">${data.price} ج.م</td>
-                        <td><span class="text-muted small">${data.times}</span></td>
+                        <td><span class="badge bg-primary small">${data.goTimes || '---'}</span></td>
+                        <td><span class="badge bg-warning text-dark small">${data.returnTimes || '---'}</span></td>
                         <td>
                             <button class="btn btn-sm btn-outline-danger delete-btn" data-id="${docSnap.id}">
                                 <i class="fa-solid fa-trash-can"></i> حذف
@@ -128,13 +172,16 @@
                 e.preventDefault();
                 const name = document.getElementById("destName").value;
                 const price = parseFloat(document.getElementById("destPrice").value);
-                const times = document.getElementById("destTimes").value;
+                const goTimes = document.getElementById("destGoTimes").value;
+                const returnTimes = document.getElementById("destReturnTimes").value;
 
                 try {
                     await addDoc(collection(db, "destinations"), {
                         name,
                         price,
-                        times,
+                        goTimes,
+                        returnTimes,
+                        times: `${goTimes} | ${returnTimes}`, // لضمان التوافق مع الكود القديم إن وجد
                         createdAt: new Date()
                     });
                     alert("تم حفظ الوجهة والأسعار بنجاح في الفايربيز!");
@@ -162,5 +209,9 @@
         // تشغيل الجلب أول ما الصفحة تفتح
         fetchDestinations();
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+
 </body>
+
 </html>

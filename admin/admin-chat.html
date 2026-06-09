@@ -14,10 +14,16 @@
         <div class="container">
             <a class="navbar-brand fw-bold" href="dashboard.html">UniRide Admin 🛠️</a>
             <div class="navbar-nav">
-                <a class="nav-link" href="dashboard.html">الإحصائيات</a>
+                <a class="nav-link active" href="dashboard.html">الإحصائيات</a>
                 <a class="nav-link" href="manage-drivers.html">إدارة السائقين</a>
                 <a class="nav-link" href="destinations.html">الوجهات والأسعار</a>
-                <a class="nav-link active" href="admin-chat.html">الشكاوى والمقترحات</a>
+                <a class="nav-link" href="admin-chat.html">الشكاوى والمقترحات</a>
+                <div class="navbar-nav me-auto">
+                    <button id="logoutBtn" class="nav-link btn btn-link text-danger">
+                        <i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج
+                    </button>
+                </div>
+
             </div>
         </div>
     </nav>
@@ -201,5 +207,8 @@
         // تشغيل جلب التذاكر فور فتح الصفحة
         loadChatTickets();
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script type="module" src="../js/admin.js"></script>
 </body>
 </html>

@@ -5,13 +5,13 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase
 
 // بيانات مشروعك الفعلي UniRide
 export const firebaseConfig = {
-  apiKey: "AIzaSyCsY2MeeGeZWrYfKlVGyW0yqq9j8kHmfh8",
-  authDomain: "uniride-7131e.firebaseapp.com",
-  projectId: "uniride-7131e",
-  storageBucket: "uniride-7131e.firebasestorage.app",
-  messagingSenderId: "467989943720",
-  appId: "1:467989943720:web:69eeb20aa0ea73237f799d",
-  measurementId: "G-VJ0ZHZN1Z5"
+  apiKey: "AIzaSyCK2GBc16jtaJWhvoCoR9kiu-Bn-XhqITs",
+  authDomain: "uniride-4549d.firebaseapp.com",
+  projectId: "uniride-4549d",
+  storageBucket: "uniride-4549d.firebasestorage.app",
+  messagingSenderId: "1054843810514",
+  appId: "1:1054843810514:web:4223a69c6d123dadb4b30b",
+  measurementId: "G-DRN937EWB3"
 };
 
 // تهيئة الفايربيز
