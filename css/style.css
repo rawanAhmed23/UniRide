@@ -1,0 +1,20 @@
+/* زيادة المسافة بين الصفوف */
+.table td, .table th {
+    padding: 10px !important;
+}
+
+/* جعل الحواف دائرية قليلاً للكارد */
+.card {
+    border-radius: 15px !important;
+}
+
+/* تحسين شكل الأزرار */
+.btn-sm {
+    padding: 5px 15px !important;
+    border-radius: 8px !important;
+}
+
+.card {
+    max-width: 900px; /* هذا يحدد العرض الأقصى للجدول */
+    margin: 0 auto;   /* هذا يسنتر الجدول في منتصف الصفحة */
+}
