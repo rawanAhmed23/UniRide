@@ -16,9 +16,10 @@
         <div class="container">
             <a class="navbar-brand fw-bold" href="dashboard.html">UniRide Admin 🛠️</a>
             <div class="navbar-nav">
-                <a class="nav-link active" href="dashboard.html">الإحصائيات</a>
+                <a class="nav-link" href="dashboard.html">الإحصائيات</a>
                 <a class="nav-link" href="manage-drivers.html">إدارة السائقين</a>
-                <a class="nav-link" href="destinations.html">الوجهات والأسعار</a>
+                <a class="nav-link" href="admin-approvals.html">طلبات التسجيل</a>
+                <a class="nav-link active" href="destinations.html">الوجهات والأسعار</a>
                 <a class="nav-link" href="admin-chat.html">الشكاوى والمقترحات</a>
                 <div class="navbar-nav me-auto">
                     <button id="logoutBtn" class="nav-link btn btn-link text-danger">
@@ -100,6 +101,18 @@
                             <tbody id="destinationsTableBody">
                             </tbody>
                         </table>
+                        <div class="pagination-controls" style="margin-top: 20px;">
+                            <div
+                                class="d-flex justify-content-between align-items-center mt-3 p-2 bg-white rounded shadow-sm">
+                                <button id="prevBtn" class="btn btn-outline-secondary btn-sm px-4" disabled>
+                                    <i class="fa-solid fa-arrow-right me-1"></i> السابق
+                                </button>
+                                <span id="pageInfo" class="text-muted fw-bold">صفحة الوجهات</span>
+                                <button id="nextBtn" class="btn btn-outline-primary btn-sm px-4">
+                                    التالي <i class="fa-solid fa-arrow-left ms-1"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -108,105 +121,277 @@
     <!-- <script type="module" src="../js/admin.js"></script> -->
 
     <script type="module">
-        import { getAuth, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { db } from "../js/firebase-config.js";
-        import { collection, addDoc, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import {
+            collection,
+            addDoc,
+            getDocs,
+            deleteDoc,
+            doc,
+            query,
+            orderBy,
+            limit,
+            startAfter
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // =======================
+        // المتغيرات الأساسية
+        // =======================
+        const pageSize = 5;
+
+        let firstVisible = null;
+        let lastVisible = null;
+        let pageStack = [];
 
         const destinationForm = document.getElementById("destinationForm");
         const tableBody = document.getElementById("destinationsTableBody");
+        const logoutBtn = document.getElementById("logoutBtn");
+        const nextBtn = document.getElementById("nextBtn");
+        const prevBtn = document.getElementById("prevBtn");
 
-        const logoutBtn = document.getElementById('logoutBtn');
-
+        // =======================
+        // تسجيل الخروج
+        // =======================
         if (logoutBtn) {
-            logoutBtn.addEventListener('click', () => {
-                const auth = getAuth();
-
-                signOut(auth).then(() => {
-                    // تسجيل خروج ناجح
-                    console.log("تم تسجيل الخروج بنجاح");
-                    // تحويل المستخدم إلى صفحة تسجيل الدخول
-                    window.location.href = "../auth/login.html";
-                }).catch((error) => {
-                    // حدث خطأ
-                    console.error("حدث خطأ أثناء تسجيل الخروج:", error);
-                    alert("فشل تسجيل الخروج، حاول مرة أخرى.");
-                });
+            logoutBtn.addEventListener("click", async () => {
+                await signOut(getAuth());
+                window.location.href = "../auth/login.html";
             });
         }
 
-        // دالة جلب وعرض الوجهات
-        async function fetchDestinations() {
-            tableBody.innerHTML = "<tr><td colspan='6'>جاري تحميل الوجهات...</td></tr>";
+        // =======================
+        // أزرار التنقل
+        // =======================
+        nextBtn.addEventListener("click", () => fetchDestinations("next"));
+        prevBtn.addEventListener("click", () => fetchDestinations("prev"));
+
+        // =======================
+        // جلب البيانات
+        // =======================
+        async function fetchDestinations(direction = null) {
+
+            tableBody.innerHTML = `
+        <tr>
+            <td colspan="6" class="text-center p-3">
+                جاري تحميل البيانات...
+            </td>
+        </tr>
+    `;
+
+            nextBtn.disabled = true;
+            prevBtn.disabled = true;
+
             try {
-                const querySnapshot = await getDocs(collection(db, "destinations"));
+
+                const collRef = collection(db, "destinations");
+                let q;
+
+                // الصفحة الأولى
+                if (direction === null) {
+
+                    pageStack = [];
+
+                    q = query(
+                        collRef,
+                        orderBy("createdAt", "desc"),
+                        limit(pageSize)
+                    );
+
+                }
+
+                // الصفحة التالية
+                else if (direction === "next" && lastVisible) {
+
+                    pageStack.push(firstVisible);
+
+                    q = query(
+                        collRef,
+                        orderBy("createdAt", "desc"),
+                        startAfter(lastVisible),
+                        limit(pageSize)
+                    );
+
+                }
+
+                // الصفحة السابقة
+                else if (direction === "prev") {
+
+                    pageStack.pop();
+
+                    const previousCursor = pageStack[pageStack.length - 1];
+
+                    if (previousCursor) {
+
+                        q = query(
+                            collRef,
+                            orderBy("createdAt", "desc"),
+                            startAfter(previousCursor),
+                            limit(pageSize)
+                        );
+
+                    } else {
+
+                        q = query(
+                            collRef,
+                            orderBy("createdAt", "desc"),
+                            limit(pageSize)
+                        );
+                    }
+                }
+
+                const snapshot = await getDocs(q);
+
+                if (snapshot.empty) {
+
+                    tableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center">
+                        لا توجد بيانات
+                    </td>
+                </tr>
+            `;
+
+                    return;
+                }
+
+                firstVisible = snapshot.docs[0];
+                lastVisible = snapshot.docs[snapshot.docs.length - 1];
+
                 tableBody.innerHTML = "";
 
-                querySnapshot.forEach((docSnap) => {
+                snapshot.forEach((docSnap) => {
+
                     const data = docSnap.data();
+
                     const tr = document.createElement("tr");
+
                     tr.innerHTML = `
-                        <td class="fw-bold text-dark">${data.name}</td>
-                        <td><span class="badge bg-secondary">الموقف الثابت</span></td>
-                        <td class="text-success fw-bold">${data.price} ج.م</td>
-                        <td><span class="badge bg-primary small">${data.goTimes || '---'}</span></td>
-                        <td><span class="badge bg-warning text-dark small">${data.returnTimes || '---'}</span></td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-danger delete-btn" data-id="${docSnap.id}">
-                                <i class="fa-solid fa-trash-can"></i> حذف
-                            </button>
-                        </td>
-                    `;
+                <td class="fw-bold text-dark">${data.name}</td>
+
+                <td>
+                    <span class="badge bg-secondary">
+                        الموقف الثابت
+                    </span>
+                </td>
+
+                <td class="text-success fw-bold">
+                    ${data.price} ج.م
+                </td>
+
+                <td>
+                    <span class="badge bg-primary small">
+                        ${data.goTimes || "---"}
+                    </span>
+                </td>
+
+                <td>
+                    <span class="badge bg-warning text-dark small">
+                        ${data.returnTimes || "---"}
+                    </span>
+                </td>
+
+                <td>
+                    <button
+                        class="btn btn-sm btn-outline-danger delete-btn"
+                        data-id="${docSnap.id}">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </td>
+            `;
+
                     tableBody.appendChild(tr);
 
-                    // ربط زر الحذف بالـ Firestore
-                    tr.querySelector(".delete-btn").addEventListener("click", () => deleteDestination(docSnap.id));
-                });
-            } catch (error) {
-                console.error("Error: ", error);
-            }
-        }
-
-        // إضافة وجهة جديدة
-        if (destinationForm) {
-            destinationForm.addEventListener("submit", async (e) => {
-                e.preventDefault();
-                const name = document.getElementById("destName").value;
-                const price = parseFloat(document.getElementById("destPrice").value);
-                const goTimes = document.getElementById("destGoTimes").value;
-                const returnTimes = document.getElementById("destReturnTimes").value;
-
-                try {
-                    await addDoc(collection(db, "destinations"), {
-                        name,
-                        price,
-                        goTimes,
-                        returnTimes,
-                        times: `${goTimes} | ${returnTimes}`, // لضمان التوافق مع الكود القديم إن وجد
-                        createdAt: new Date()
+                    tr.querySelector(".delete-btn").addEventListener("click", () => {
+                        deleteDestination(docSnap.id);
                     });
-                    alert("تم حفظ الوجهة والأسعار بنجاح في الفايربيز!");
-                    destinationForm.reset();
-                    fetchDestinations();
-                } catch (err) {
-                    alert("خطأ في حفظ البيانات: " + err.message);
-                }
-            });
-        }
 
-        // دالة حذف وجهة
-        async function deleteDestination(id) {
-            if (confirm("هل أنت متأكد من حذف هذه الوجهة؟ سيؤثر ذلك على الحجوزات المرتبطة بها.")) {
-                try {
-                    await deleteDoc(doc(db, "destinations", id));
-                    alert("تم حذف الوجهة بنجاح.");
-                    fetchDestinations();
-                } catch (err) {
-                    alert("خطأ في الحذف: " + err.message);
-                }
+                });
+
+                // =======================
+                // فحص الصفحة التالية
+                // =======================
+                const nextQuery = query(
+                    collRef,
+                    orderBy("createdAt", "desc"),
+                    startAfter(lastVisible),
+                    limit(1)
+                );
+
+                const nextSnapshot = await getDocs(nextQuery);
+
+                nextBtn.disabled = nextSnapshot.empty;
+
+                // تعطيل السابق إذا كنا في أول صفحة
+                prevBtn.disabled = pageStack.length === 0;
+
+            } catch (error) {
+
+                console.error(error);
+
+                tableBody.innerHTML = `
+            <tr>
+                <td colspan="6"
+                    class="text-danger text-center">
+                    حدث خطأ أثناء تحميل البيانات
+                </td>
+            </tr>
+        `;
             }
         }
 
-        // تشغيل الجلب أول ما الصفحة تفتح
+        // =======================
+        // إضافة وجهة
+        // =======================
+        destinationForm.addEventListener("submit", async (e) => {
+
+            e.preventDefault();
+
+            try {
+
+                await addDoc(collection(db, "destinations"), {
+                    name: document.getElementById("destName").value,
+                    price: parseFloat(document.getElementById("destPrice").value),
+                    goTimes: document.getElementById("destGoTimes").value,
+                    returnTimes: document.getElementById("destReturnTimes").value,
+                    createdAt: new Date()
+                });
+
+                alert("تم حفظ الوجهة بنجاح");
+
+                destinationForm.reset();
+
+                await fetchDestinations();
+
+            } catch (err) {
+
+                alert("خطأ: " + err.message);
+            }
+        });
+
+        // =======================
+        // حذف وجهة
+        // =======================
+        async function deleteDestination(id) {
+
+            if (!confirm("هل أنت متأكد من حذف هذه الوجهة؟")) return;
+
+            try {
+
+                await deleteDoc(doc(db, "destinations", id));
+
+                await fetchDestinations();
+
+            } catch (err) {
+
+                console.error(err);
+                alert("حدث خطأ أثناء الحذف");
+            }
+        }
+
+        // =======================
+        // التحميل الأولي
+        // =======================
         fetchDestinations();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

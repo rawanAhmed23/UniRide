@@ -1,7 +1,10 @@
 import { db, firebaseConfig } from "./firebase-config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { collection, doc, setDoc, getDocs, updateDoc, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import {
+    collection, doc, setDoc, updateDoc, deleteDoc, addDoc,
+    onSnapshot, query, orderBy, getDocs
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { checkAccess } from "../js/auth-guard.js";
 checkAccess("admin"); // لن يفتح الصفحة إلا لو كان أدمن فعلاً
 
@@ -17,7 +20,7 @@ const cancelEditBtn = document.getElementById("cancelEditBtn");
 const formTitle = document.getElementById("formTitle");
 const destTableBody = document.getElementById("destinationsTableBody");
 const destinationForm = document.getElementById("destinationForm");
-const assignedDestinationSelect = document.getElementById("assignedDestination"); 
+const assignedDestinationSelect = document.getElementById("assignedDestination");
 
 
 const logoutBtn = document.getElementById('logoutBtn');
@@ -25,12 +28,12 @@ const logoutBtn = document.getElementById('logoutBtn');
 if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
         const auth = getAuth();
-        
+
         signOut(auth).then(() => {
             // تسجيل خروج ناجح
             console.log("تم تسجيل الخروج بنجاح");
             // تحويل المستخدم إلى صفحة تسجيل الدخول
-            window.location.href = "../auth/login.html"; 
+            window.location.href = "../auth/login.html";
         }).catch((error) => {
             // حدث خطأ
             console.error("حدث خطأ أثناء تسجيل الخروج:", error);
@@ -39,38 +42,71 @@ if (logoutBtn) {
     });
 }
 
+
+function formatDateForInput(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return "";
+    
+    // لو التاريخ جاي بالفعل بالصيغة المطلوبة، رجعه زي ما هو
+    if (dateStr.includes("-") && dateStr.split("-")[0].length === 4) return dateStr;
+
+    // لو التاريخ جاي بصيغة DD-MM-YYYY، حوله لـ YYYY-MM-DD
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+        const day = parts[0].padStart(2, '0');
+        const month = parts[1].padStart(2, '0');
+        const year = parts[2];
+        return `${year}-${month}-${day}`;
+    }
+    return dateStr;
+}
 // ==========================================
 // دالة لجلب خطوط السير ووضعها في الـ Dropdown ديناميكياً
 // ==========================================
 async function populateDestinationsDropdown() {
-    if (!assignedDestinationSelect) return;
+    const selectElement = document.getElementById("assignedDestination");
+
+    if (!selectElement) {
+        console.error("خطأ: عنصر الـ select بالـ id 'assignedDestination' غير موجود في صفحة الـ HTML!");
+        return;
+    }
+
     try {
         const querySnapshot = await getDocs(collection(db, "destinations"));
-        assignedDestinationSelect.innerHTML = '<option value="" selected disabled>اختر الوجهة الثابتة...</option>';
-        
+
+        // تنظيف القائمة قبل التعبئة
+        selectElement.innerHTML = '<option value="" selected disabled>اختر الوجهة الثابتة...</option>';
+
+        if (querySnapshot.empty) {
+            console.warn("تحذير: لا توجد وجهات في قاعدة البيانات (collection: destinations)!");
+        }
+
         querySnapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            const option = document.createElement("option");
-            option.value = data.name; 
-            option.textContent = data.name;
-            assignedDestinationSelect.appendChild(option);
+            // تأكدي إن الحقل اسمه 'name' في قاعدة البيانات
+            if (data.name) {
+                const option = document.createElement("option");
+                option.value = data.name;
+                option.textContent = data.name;
+                selectElement.appendChild(option);
+            } else {
+                console.log("وجدت document لكن لا يحتوي على حقل باسم 'name':", docSnap.id);
+            }
         });
+        console.log("تم تعبئة القائمة بنجاح");
+
     } catch (error) {
-        console.error("Error loading destinations for dropdown: ", error);
+        console.error("خطأ أثناء جلب الوجهات من Firestore: ", error);
     }
 }
-
 // ==========================================
 // 1. الجزء الخاص بإدارة السائقين (Drivers CRUD)
 // ==========================================
-async function fetchDrivers() {
-    if (!driversTableBody) return; 
-    driversTableBody.innerHTML = "<tr><td colspan='7'>جاري تحميل البيانات...</td></tr>"; 
-    try {
-        const querySnapshot = await getDocs(collection(db, "users"));
+function listenToDrivers() {
+    if (!driversTableBody) return;
+
+    onSnapshot(collection(db, "users"), (snapshot) => {
         driversTableBody.innerHTML = "";
-        
-        querySnapshot.forEach((docSnap) => {
+        snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             if (data.role === "driver") {
                 const tr = document.createElement("tr");
@@ -87,35 +123,65 @@ async function fetchDrivers() {
                     </td>
                 `;
                 driversTableBody.appendChild(tr);
-                
+
                 tr.querySelector(".edit-btn").addEventListener("click", () => startEdit(docSnap.id, data));
                 tr.querySelector(".delete-btn").addEventListener("click", () => deleteDriver(docSnap.id));
             }
         });
-    } catch (error) { console.error("Error fetching drivers: ", error); }
+    });
+}
+
+// 2. نظام استقبال التنبيهات (أضيفيه لصفحة الأدمن)
+function listenToNotifications() {
+    const q = query(collection(db, "notifications"), orderBy("timestamp", "desc"));
+
+    // تعريف متغير لتخزين وقت بدء الصفحة
+    const startTime = Date.now();
+
+    onSnapshot(q, (snapshot) => {
+        // نستخدم docChanges بدلاً من forEach
+        snapshot.docChanges().forEach((change) => {
+            // نتأكد أن التغيير هو "إضافة" (added) وليس تعديل
+            if (change.type === "added") {
+                const data = change.doc.data();
+
+                // شرط إضافي: نتأكد أن التنبيه تم إنشاؤه بعد تحميل الصفحة 
+                // (عشان نتجنب ظهور التنبيهات القديمة عند عمل Refresh)
+                if (data.timestamp && data.timestamp.toMillis() > startTime - 5000) {
+
+                    // هنا نظهر التنبيه
+                    alert(`🔔 تنبيه جديد: ${data.driverName} قام بـ ${data.message}`);
+                }
+            }
+        });
+    });
 }
 
 function startEdit(id, data) {
-    if(!formTitle || !submitBtn || !cancelEditBtn) return;
+    if (!formTitle || !submitBtn || !cancelEditBtn) return;
     formTitle.textContent = "تعديل بيانات السائق: " + data.name;
     submitBtn.textContent = "تحديث البيانات";
     cancelEditBtn.classList.remove("d-none");
-    
+
     document.getElementById("driverId").value = id;
     document.getElementById("driverName").value = data.name || '';
     document.getElementById("driverNationalId").value = data.nationalId || '';
     document.getElementById("driverEmail").value = data.email || '';
-    document.getElementById("driverEmail").disabled = true; 
+    document.getElementById("driverEmail").disabled = true;
     document.getElementById("carType").value = data.carType || 'ملاكي';
     document.getElementById("carModel").value = data.carModel || '';
     document.getElementById("plateNumber").value = data.plateNumber || '';
     document.getElementById("maxPassengers").value = data.maxPassengers || '';
-    document.getElementById("driverLicenseExpiry").value = data.driverLicenseExpiry || '';
-    document.getElementById("carLicenseExpiry").value = data.carLicenseExpiry || '';
+// سطر 114
+document.getElementById("driverLicenseExpiry").value = data.driverLicenseExpiry ? formatDateForInput(data.driverLicenseExpiry) : "";
+
+// سطر 115
+document.getElementById("carLicenseExpiry").value = data.carLicenseExpiry ? formatDateForInput(data.carLicenseExpiry) : "";
+
     document.getElementById("baseSalary").value = data.baseSalary || '';
-    
+
     if (assignedDestinationSelect) {
-        assignedDestinationSelect.value = data.assignedDestination || ''; 
+        assignedDestinationSelect.value = data.assignedDestination || '';
     }
 }
 
@@ -144,17 +210,17 @@ if (driverForm) {
         const driverLicenseExpiry = document.getElementById("driverLicenseExpiry").value;
         const carLicenseExpiry = document.getElementById("carLicenseExpiry").value;
         const baseSalary = document.getElementById("baseSalary").value;
-        const assignedDestination = assignedDestinationSelect ? assignedDestinationSelect.value : ""; 
+        const assignedDestination = assignedDestinationSelect ? assignedDestinationSelect.value : "";
 
         if (id) {
             try {
                 await updateDoc(doc(db, "users", id), {
-                    name, nationalId, carType, carModel, plateNumber, assignedDestination, 
+                    name, nationalId, carType, carModel, plateNumber, assignedDestination,
                     maxPassengers: parseInt(maxPassengers), driverLicenseExpiry, carLicenseExpiry, baseSalary: parseFloat(baseSalary)
                 });
                 alert("تم تحديث بيانات السائق والخط بنجاح!");
                 cancelEditBtn.click();
-                fetchDrivers();
+                listenToDrivers();
             } catch (err) { alert("خطأ في التحديث: " + err.message); }
         } else {
             try {
@@ -166,12 +232,12 @@ if (driverForm) {
                 await setDoc(doc(db, "users", user.uid), {
                     uid: user.uid, name, nationalId, email, carType, carModel, plateNumber,
                     maxPassengers: parseInt(maxPassengers), driverLicenseExpiry, carLicenseExpiry, baseSalary: parseFloat(baseSalary),
-                    monthlyTripsCount: 0, assignedDestination: assignedDestination, role: "driver", createdAt: new Date() 
+                    monthlyTripsCount: 0, assignedDestination: assignedDestination, role: "driver", createdAt: new Date()
                 });
 
                 alert("تم إنشاء حساب السائق وتعيين الخط! الباسورد هو الرقم القومي.");
                 driverForm.reset();
-                fetchDrivers();
+                listenToDrivers();
             } catch (err) { alert("خطأ أثناء إضافة السائق: " + err.message); }
         }
     });
@@ -182,7 +248,7 @@ async function deleteDriver(id) {
         try {
             await deleteDoc(doc(db, "users", id));
             alert("تم الحذف بنجاح.");
-            fetchDrivers();
+            listenToDrivers();
         } catch (err) { alert("خطأ في الحذف: " + err.message); }
     }
 }
@@ -191,12 +257,12 @@ async function deleteDriver(id) {
 // 2. الجزء الخاص بالوجهات والأسعار (Destinations)
 // ==========================================
 async function fetchDestinations() {
-    if (!destTableBody) return; 
+    if (!destTableBody) return;
     destTableBody.innerHTML = "<tr><td colspan='5'>جاري تحميل الوجهات...</td></tr>";
     try {
         const querySnapshot = await getDocs(collection(db, "destinations"));
         destTableBody.innerHTML = "";
-        
+
         querySnapshot.forEach((docSnap) => {
             const data = docSnap.data();
             const tr = document.createElement("tr");
@@ -243,14 +309,14 @@ async function deleteDestination(id) {
 // 3. الإحصائيات والرسوم البيانية والماليات (Dashboard)
 // ==========================================
 async function initDashboard() {
-    if (!document.getElementById("studentsChart")) return; 
-    
+    if (!document.getElementById("studentsChart")) return;
+
     try {
         const usersSnapshot = await getDocs(collection(db, "users"));
         const bookingsSnapshot = await getDocs(collection(db, "bookings"));
         const destinationsSnapshot = await getDocs(collection(db, "destinations"));
 
-        let totalTripsCount = bookingsSnapshot.size; 
+        let totalTripsCount = bookingsSnapshot.size;
         let totalRevenueSum = 0;
         let totalDriversSalarySum = 0;
         let destinationStats = {};
@@ -264,7 +330,7 @@ async function initDashboard() {
             if (user.role === "driver") {
                 const trips = user.monthlyTripsCount || 0;
                 let finalSalary = user.baseSalary || 0;
-                if (trips < 40) finalSalary = finalSalary * 0.95; 
+                if (trips < 40) finalSalary = finalSalary * 0.95;
                 totalDriversSalarySum += finalSalary;
 
                 if (user.assignedDestination && destinationStats[user.assignedDestination]) {
@@ -316,8 +382,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (assignedDestinationSelect) {
         await populateDestinationsDropdown();
     }
+    listenToDrivers();
+    listenToNotifications();
     if (driversTableBody) {
-        fetchDrivers();
+        listenToDrivers();
     }
     if (destTableBody) {
         fetchDestinations();
