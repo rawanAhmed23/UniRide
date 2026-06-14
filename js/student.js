@@ -1,6 +1,5 @@
 import { db, auth } from "./firebase-config.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-// تم إضافة doc و getDoc هنا لجلب بيانات اسم الطالب من كوليكشن users
 import { doc, getDoc, collection, getDocs, addDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // ربط عناصر واجهة المستخدم بالـ DOM
@@ -17,11 +16,19 @@ const bookingsTable = document.getElementById("studentBookingsTable");
 const logoutBtn = document.getElementById("logoutBtn");
 const welcomeStudentName = document.getElementById("welcomeStudentName");
 
+// عناصر المودال الجديد (بوابة الدفع)
+const paymentAmountDisplay = document.getElementById("paymentAmountDisplay");
+const confirmPaymentBtn = document.getElementById("confirmPaymentBtn");
+const payCard = document.getElementById("payCard");
+const payWallet = document.getElementById("payWallet");
+const cardFields = document.getElementById("cardFields");
+
 let destinationsData = {}; 
-let driversData = {}; // لتخزين بيانات السائقين الذين تم جلبهم للخط المختار
+let driversData = {}; 
 let currentStudentUid = null;
-let currentStudentName = "طالب مشترك"; // 👈 متغير عالمي لتخزين اسم الطالب الفعلي
+let currentStudentName = "طالب مشترك"; 
 let selectedBasePrice = 0;
+let pendingBooking = null; // 🌟 متغير عالمي مؤقت لحفظ بيانات الحجز الحالية أثناء عملية الدفع
 
 
 // 1. التأكد من هوية الطالب وجلسة تسجيل الدخول وجلب اسمه
@@ -30,24 +37,19 @@ onAuthStateChanged(auth, async (user) => {
         window.location.href = "../auth/login.html"; 
     } else {
         currentStudentUid = user.uid;
-        
-        // نضع كلمة جاري التحميل مؤقتاً لحد ما الـ Firestore ترد علينا
         welcomeStudentName.textContent = "جاري التحميل..."; 
 
         try {
-            // 🔍 جلب مستند الطالب لقراءة اسمه الحقيقي ونقله للحجوزات
             const userDoc = await getDoc(doc(db, "users", user.uid));
             if (userDoc.exists()) {
                 currentStudentName = userDoc.data().name || "طالب مشترك";
-                
-                // 🌟 هنا السر! بنحدث النص في الصفحة بعد ما الاسم رجع من الداتابيز فعلياً
                 welcomeStudentName.textContent = currentStudentName;
             } else {
                 welcomeStudentName.textContent = "طالب مشترك";
             }
         } catch (err) {
             console.error("Error fetching student profile name:", err);
-            welcomeStudentName.textContent = "طالب مشترك"; // حماية في حالة حدوث خطأ في الشبكة
+            welcomeStudentName.textContent = "طالب مشترك"; 
         }
 
         loadDestinations();
@@ -75,16 +77,13 @@ async function loadDestinations() {
     }
 }
 
-// 3. دالة جلب السائقين المتاحين بناءً على الوجهة المختارة (الفلترة الذكية)
+// 3. دالة جلب السائقين المتاحين بناءً على الوجهة المختارة
 async function loadDriversForDestination(destinationName) {
     try {
         bookingDriver.disabled = true;
         bookingDriver.innerHTML = '<option value="" selected disabled>جاري تحميل الكباتن المتاحين لهذا الخط...</option>';
-        
-        // تفريغ البيانات السابقة
         driversData = {};
 
-        // عمل كويري في كوليكشن users للبحث عن الحسابات التي دورها سائق وتعمل على نفس الوجهة
         const driversQuery = query(
             collection(db, "users"), 
             where("role", "==", "driver"),
@@ -101,30 +100,28 @@ async function loadDriversForDestination(destinationName) {
 
         querySnapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            driversData[docSnap.id] = data; // تخزين البيانات محلياً لاستخدامها عند الحفظ
+            driversData[docSnap.id] = data; 
 
             const option = document.createElement("option");
             option.value = docSnap.id;
-            // عرض اسم السائق وموديل السيارة إن وجد
             option.textContent = `كابتن / ${data.name} ${data.carModel ? `(${data.carModel})` : ''}`;
             bookingDriver.appendChild(option);
         });
         
-        bookingDriver.disabled = false; // تفعيل القائمة بعد اكتمال التحميل بنجاح
+        bookingDriver.disabled = false; 
     } catch (err) {
         console.error("Error loading filtered drivers:", err);
         bookingDriver.innerHTML = '<option value="" selected disabled>خطأ في تحميل السائقين</option>';
     }
 }
 
-// 4. معالجة تحديثات النموذج (Form Views) وحساب التكلفة والمواعيد
+// 4. معالجة تحديثات النموذج وحساب التكلفة والمواعيد
 if (bookingDest) {
     bookingDest.addEventListener("change", (e) => {
         const destId = e.target.value;
         const dest = destinationsData[destId];
         if (!dest) return;
 
-        // استدعاء دالة جلب السائقين المخصصة لهذا الخط تلقائياً بمجرد اختيار الطالب للوجهة
         loadDriversForDestination(dest.name);
         handleFormView();
     });
@@ -212,7 +209,7 @@ function calculatePrice() {
     livePrice.textContent = finalPrice + " ج.م";
 }
 
-// 5. رفع مستند الحجز النهائي لـ Firestore (بعد التحقق من عدم التكرار وعدم اكتمال العدد)
+// 5. التحقق من الحجز ثم فتح مودال الدفع (بدلاً من الرفع المباشر)
 if (bookingForm) {
     bookingForm.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -229,11 +226,10 @@ if (bookingForm) {
         const finalPrice = (tripType === "ذهاب وعودة") ? selectedBasePrice * 2 : selectedBasePrice;
 
         try {
-            // منع الضغط المتكرر على الزرار أثناء المعالجة
             confirmBookingBtn.disabled = true;
-            confirmBookingBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري التحقق من الحجوزات والسعة...`;
+            confirmBookingBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري التحقق من السعة...`;
 
-            // 🔍 خطوة اللوجيك الأولى: التحقق من عدم وجود حجز مسبق لنفس الطالب في نفس الميعاد والوجهة
+            // 🔍 الفحص الأول: منع التكرار
             const checkQuery = query(
                 collection(db, "bookings"),
                 where("studentUid", "==", currentStudentUid),
@@ -245,29 +241,19 @@ if (bookingForm) {
             const querySnapshot = await getDocs(checkQuery);
             let isDuplicate = false;
 
-            // نلف على الحجوزات النشطة ونشوف لو المواعيد متطابقة لنفس الطالب
             querySnapshot.forEach((docSnap) => {
                 const existingBooking = docSnap.data();
-                if (tripType === "ذهاب" && existingBooking.goTime === goTime) {
-                    isDuplicate = true;
-                } else if (tripType === "عودة" && existingBooking.returnTime === returnTime) {
-                    isDuplicate = true;
-                } else if (tripType === "ذهاب وعودة" && existingBooking.goTime === goTime && existingBooking.returnTime === returnTime) {
-                    isDuplicate = true;
-                }
+                if (tripType === "ذهاب" && existingBooking.goTime === goTime) isDuplicate = true;
+                else if (tripType === "عودة" && existingBooking.returnTime === returnTime) isDuplicate = true;
+                else if (tripType === "ذهاب وعودة" && existingBooking.goTime === goTime && existingBooking.returnTime === returnTime) isDuplicate = true;
             });
 
-            // لو لقينا حجز مطابق، نوقف العملية وننبه الطالب
             if (isDuplicate) {
                 alert(`⚠️ عذراً! أنت مسجل بالفعل في رحلة ${tripType} إلى (${destinationName}) في هذا الميعاد.`);
-                confirmBookingBtn.disabled = false;
-                confirmBookingBtn.innerHTML = `<i class="fa-solid fa-circle-check me-1"></i> تأكيد الحجز والرفع للقاعدة`;
                 return; 
             }
 
-            // ============================================================
-            // 🚨 خطوة اللوجيك الجديدة: فحص سعة كراسي السيارة (منع التكدس)
-            // ============================================================
+            // 🚨 الفحص الثاني: فحص سعة الكراسي
             const capacityQuery = query(
                 collection(db, "bookings"),
                 where("driverId", "==", driverId),
@@ -278,45 +264,33 @@ if (bookingForm) {
             let goCount = 0;
             let returnCount = 0;
 
-            // حساب عدد الكراسي المحجوزة فعلياً لكل ميعاد عند هذا السائق
             capacitySnapshot.forEach((docSnap) => {
                 const bookingData = docSnap.data();
                 if (bookingData.goTime === goTime && goTime !== "---") goCount++;
                 if (bookingData.returnTime === returnTime && returnTime !== "---") returnCount++;
             });
 
-            // جلب الحد الأقصى لكراسي السائق (القيمة الافتراضية 4 في حال عدم تحديدها بالبروفايل)
             const maxCapacity = driversData[driverId]?.maxPassengers || 4;
 
-            // 1. تحقق رحلات الذهاب
             if (tripType === "ذهاب" && goCount >= maxCapacity) {
-                alert(`⚠️ عذراً! ميعاد الذهاب المختار مكتمل العدد تماماً مع هذا الكابتن (${goCount}/${maxCapacity} كراسي محجوزة). يرجى اختيار ميعاد آخر أو كابتن آخر.`);
-                confirmBookingBtn.disabled = false;
-                confirmBookingBtn.innerHTML = `<i class="fa-solid fa-circle-check me-1"></i> تأكيد الحجز والرفع للقاعدة`;
+                alert(`⚠️ عذراً! ميعاد الذهاب مكتمل العدد (${goCount}/${maxCapacity} كراسي).`);
                 return;
             }
-
-            // 2. تحقق رحلات العودة
             if (tripType === "عودة" && returnCount >= maxCapacity) {
-                alert(`⚠️ عذراً! ميعاد العودة المختار مكتمل العدد تماماً مع هذا الكابتن (${returnCount}/${maxCapacity} كراسي محجوزة). يرجى اختيار ميعاد آخر أو كابتن آخر.`);
-                confirmBookingBtn.disabled = false;
-                confirmBookingBtn.innerHTML = `<i class="fa-solid fa-circle-check me-1"></i> تأكيد الحجز والرفع للقاعدة`;
+                alert(`⚠️ عذراً! ميعاد العودة مكتمل العدد (${returnCount}/${maxCapacity} كراسي).`);
                 return;
             }
-
-            // 3. تحقق رحلات ذهاب وعودة معاً
             if (tripType === "ذهاب وعودة" && (goCount >= maxCapacity || returnCount >= maxCapacity)) {
-                alert(`⚠️ عذراً! ميعاد الذهاب أو ميعاد العودة مكتمل العدد مع هذا الكابتن. \n(حجوزات الذهاب الحالية: ${goCount}/${maxCapacity} | حجوزات العودة الحالية: ${returnCount}/${maxCapacity}). يرجى تعديل مواعيدك.`);
-                confirmBookingBtn.disabled = false;
-                confirmBookingBtn.innerHTML = `<i class="fa-solid fa-circle-check me-1"></i> تأكيد الحجز والرفع للقاعدة`;
+                alert(`⚠️ عذراً! ميعاد الذهاب أو العودة مكتمل العدد مع الكابتن.`);
                 return;
             }
-            // ============================================================
 
-            // لو مفيش تكرار ومفيش تخطي للسعة، يتم الحجز بشكل طبيعي تماماً
-            await addDoc(collection(db, "bookings"), {
+            // ============================================================
+            // 🌟 تحويل المسار للمودال: لو الفحوصات سليمة، نجهز البيانات ونفتح بوابة الدفع
+            // ============================================================
+            pendingBooking = {
                 studentUid: currentStudentUid,
-                studentName: currentStudentName, // 👈 الحقل السحري الجديد عشان يظهر عند الكابتن في الجدول!
+                studentName: currentStudentName, 
                 destination: destinationName,
                 driverId: driverId,       
                 driverName: driverName,   
@@ -324,31 +298,28 @@ if (bookingForm) {
                 goTime: goTime,
                 returnTime: returnTime,
                 totalCost: finalPrice,
-                status: "نشط", 
-                paymentStatus: "لم يدفع", // تبدأ بـ "لم يدفع" لحين ركوب الأتوبيس ودفع الكاش للسائق
+                status: "نشط",
                 createdAt: serverTimestamp()
-            });
+            };
 
-            alert(`تم حجز الرحلة بنجاح مع كابتن ${driverName}!`);
-            bookingForm.reset();
-            livePrice.textContent = "0 ج.م";
-            goTimeContainer.classList.add("d-none");
-            returnTimeContainer.classList.add("d-none");
-            bookingDriver.innerHTML = '<option value="" selected disabled>يجب اختيار الوجهة أولاً لعرض السائقين...</option>';
-            bookingDriver.disabled = true;
-            confirmBookingBtn.disabled = true;
-            
-            loadStudentBookings(); 
+            // تحديث المبلغ المطلوب في واجهة المودال
+            paymentAmountDisplay.textContent = finalPrice + " ج.م";
+
+            // إظهار المودال عن طريق الـ Bootstrap API
+            const paymentModal = new bootstrap.Modal(document.getElementById('paymentSimulationModal'));
+            paymentModal.show();
 
         } catch (err) {
-            alert("فشل الحجز: " + err.message);
+            alert("حدث خطأ أثناء فحص البيانات: " + err.message);
         } finally {
+            // إعادة الزرار لحالته الطبيعية لو الطالب قفل المودال وحب يحجز تاني
+            confirmBookingBtn.disabled = false;
             confirmBookingBtn.innerHTML = `<i class="fa-solid fa-circle-check me-1"></i> تأكيد الحجز والرفع للقاعدة`;
         }
     });
 }
 
-// 6. جلب وعرض الرحلات المحجوزة مسبقاً في الجدول للطالب
+// 6. جلب وعرض الرحلات المحجوزة مسبقاً في الجدول
 async function loadStudentBookings() {
     if (!bookingsTable) return;
     try {
@@ -356,7 +327,7 @@ async function loadStudentBookings() {
         const querySnapshot = await getDocs(q);
         
         if (querySnapshot.empty) {
-            bookingsTable.innerHTML = `<tr><td colspan="7" class="text-muted">لم تقم بحجز أي رحلات بعد.</td></tr>`;
+            bookingsTable.innerHTML = `<tr><td colspan="6" class="text-muted">لم تقم بحجز أي رحلات بعد.</td></tr>`;
             return;
         }
 
@@ -366,26 +337,20 @@ async function loadStudentBookings() {
             const tr = document.createElement("tr");
             
             let timeDisplay = "";
-            if (data.tripType === "ذهاب") {
-                timeDisplay = `الذهاب: ${data.goTime}`;
-            } else if (data.tripType === "عودة") {
-                timeDisplay = `العودة: ${data.returnTime}`;
-            } else {
-                timeDisplay = `الذهاب: ${data.goTime} | العودة: ${data.returnTime}`;
-            }
+            if (data.tripType === "ذهاب") timeDisplay = `الذهاب: ${data.goTime}`;
+            else if (data.tripType === "عودة") timeDisplay = `العودة: ${data.returnTime}`;
+            else timeDisplay = `الذهاب: ${data.goTime} | العودة: ${data.returnTime}`;
 
-            // 🎨 تحديد لون وحالة الـ Badge الخاص بالدفع ديناميكياً لتتحول للأخضر عند الدفع لكابتن الأتوبيس
             const currentPayment = data.paymentStatus || "لم يدفع";
-            const paymentBadgeClass = currentPayment === "مدفوع" ? "bg-success" : "bg-info";
+            const paymentBadgeClass = currentPayment === "مدفوع" ? "bg-success" : "bg-danger";
 
             tr.innerHTML = `
                 <td class="fw-bold">${data.destination}</td>
-                <td class="text-primary"><i class="fa-solid fa-user-steering me-1"></i> ${data.driverName || 'غير محدد'}</td>
+                <td class="text-primary"><i class="fa-solid fa-user-steering me-1"></i> ${data.driverName}</td>
                 <td><span class="badge bg-light text-dark">${data.tripType}</span></td>
                 <td class="small text-muted">${timeDisplay}</td>
                 <td class="text-success fw-bold">${data.totalCost} ج.م</td>
                 <td><span class="badge ${paymentBadgeClass}">${currentPayment}</span></td>
-                <td><span class="badge bg-success">${data.status || 'نشط'}</span></td>
             `;
             bookingsTable.appendChild(tr);
         });
@@ -394,7 +359,61 @@ async function loadStudentBookings() {
     }
 }
 
-// تسجيل الخروج التلقائي
+// ============================================================
+// 7. 🌟 الـ لوجيك الجديد بالكامل الخاص بالمودال (بوابة الدفع والرفع النهائي)
+// ============================================================
+
+// أ. تحويل الفيلدز ديناميكياً عند اختيار (بطاقة بنكية) أو (محفظة كاش)
+if (payCard && payWallet && cardFields) {
+    payCard.addEventListener("change", () => cardFields.classList.remove("d-none"));
+    payWallet.addEventListener("change", () => cardFields.classList.add("d-none"));
+}
+
+// ب. تأكيد الدفع الفعلي والرفع لقاعدة البيانات Firestore
+if (confirmPaymentBtn) {
+    confirmPaymentBtn.addEventListener("click", async () => {
+        if (!pendingBooking) return;
+
+        try {
+            // تحويل الزرار لحالة التحميل
+            confirmPaymentBtn.disabled = true;
+            confirmPaymentBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري معالجة الدفع الآمن...`;
+
+            // 💡 هنا بنحدث حقل الدفع ليصبح "مدفوع" لأن الطالب دفع في المودال بنجاح
+            pendingBooking.paymentStatus = "مدفوع";
+
+            // الرفع النهائي لـ Firestore
+            await addDoc(collection(db, "bookings"), pendingBooking);
+
+            alert(`🎉 رائعة! تم الدفع بنجاح وحجز رحلتك مع كابتن ${pendingBooking.driverName}.`);
+
+            // إغلاق المودال برمجياً
+            const modalElement = document.getElementById('paymentSimulationModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) modalInstance.hide();
+
+            // ريست للفورم والواجهات بالكامل
+            bookingForm.reset();
+            livePrice.textContent = "0 ج.م";
+            goTimeContainer.classList.add("d-none");
+            returnTimeContainer.classList.add("d-none");
+            bookingDriver.innerHTML = '<option value="" selected disabled>يجب اختيار الوجهة أولاً لعرض السائقين...</option>';
+            bookingDriver.disabled = true;
+            
+            // تفريغ البيانات المؤقتة وتحديث الجدول
+            pendingBooking = null;
+            loadStudentBookings();
+
+        } catch (err) {
+            alert("فشل إتمام عملية الدفع والحجز: " + err.message);
+        } finally {
+            confirmPaymentBtn.disabled = false;
+            confirmPaymentBtn.innerHTML = `<i class="fa-solid fa-lock me-2"></i> إدفع الآن بأمان`;
+        }
+    });
+}
+
+// تسجيل الخروج
 if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
         signOut(auth).then(() => window.location.href = "../auth/login.html");
