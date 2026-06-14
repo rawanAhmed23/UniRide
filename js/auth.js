@@ -1,8 +1,6 @@
 import { auth, db } from "./firebase-config.js";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { setDoc, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-
 
 // عناصر الصفحات من الـ DOM
 const loginForm = document.getElementById("loginForm");
@@ -21,9 +19,8 @@ function showError(message) {
 async function uploadToCloudinary(file) {
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("upload_preset", "UniRide"); // هذا هو اسم الـ preset الذي أنشأتِه
+    formData.append("upload_preset", "UniRide"); 
 
-    // التعديل هنا: استخدمنا اسم الكلاود الحقيقي من الصورة
     const cloudName = "dxdab2cdj"; 
 
     const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
@@ -33,7 +30,6 @@ async function uploadToCloudinary(file) {
 
     const data = await response.json();
     
-    // فحص النتيجة
     if (!data.secure_url) {
         console.error("خطأ من Cloudinary:", data);
         return null;
@@ -48,7 +44,7 @@ async function uploadToCloudinary(file) {
 if (signupForm) {
     signupForm.addEventListener("submit", async (e) => {
         e.preventDefault();
-        errorDiv.classList.add("d-none"); // إعادة إخفاء رسالة الخطأ القديمة
+        errorDiv.classList.add("d-none"); 
 
         const name = document.getElementById("fullName").value;
         const nationalId = document.getElementById("nationalId").value;
@@ -56,31 +52,28 @@ if (signupForm) {
         const password = document.getElementById("password").value;
         const idCardFile = document.getElementById("idCard").files[0];
 
-        // داخل الـ try الخاصة بـ signupForm
-try {
-    // 2. إنشاء الحساب
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
+        try {
+            // إنشاء الحساب في الـ Auth
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
 
-    // --- التعديل هنا ---
-    // 3. رفع صورة الكارنيه إلى Cloudinary بدلاً من Firebase Storage
-    const imageUrl = await uploadToCloudinary(idCardFile);
+            // رفع صورة الكارنيه إلى Cloudinary
+            const imageUrl = await uploadToCloudinary(idCardFile);
 
-    // 4. حفظ البيانات (كما هي، لن نغير فيها شيء!)
-    await setDoc(doc(db, "users", user.uid), {
-        uid: user.uid,
-        name: name,
-        nationalId: nationalId,
-        email: email,
-        role: "student",
-        cardImageUrl: imageUrl, // الرابط الجديد وصل هنا
-        status: "pending",
-        createdAt: new Date()
-    });
-    // ------------------
-    
-    alert("تم إنشاء الحساب بنجاح! سيتم مراجعة طلبك من قبل الإدارة، وسيتم إعلامك عبر البريد الإلكتروني بمجرد الموافقة.");
-    window.location.href = "../auth/login.html";
+            // حفظ البيانات في الـ Firestore بحالة معلقة
+            await setDoc(doc(db, "users", user.uid), {
+                uid: user.uid,
+                name: name,
+                nationalId: nationalId,
+                email: email,
+                role: "student",
+                cardImageUrl: imageUrl, 
+                status: "pending", // الحساب ينشأ معلقاً تلقائياً 🌟
+                createdAt: new Date()
+            });
+            
+            alert("تم إنشاء الحساب بنجاح! سيتم مراجعة الكارنيه وتفعيل حسابك من قبل الإدارة، ويمكنك محاولة تسجيل الدخول لاحقاً.");
+            window.location.href = "../auth/login.html";
         } catch (error) {
             console.error(error);
             if (error.code === "auth/email-already-in-use") {
@@ -93,7 +86,7 @@ try {
 }
 
 // ==========================================
-// 2. لوجيك تسجيل الدخول الموحد (لكل الأدوار)
+// 2. لوجيك تسجيل الدخول الموحد (مع فحص حالة الحساب)
 // ==========================================
 if (loginForm) {
     loginForm.addEventListener("submit", async (e) => {
@@ -108,21 +101,37 @@ if (loginForm) {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            // جلب مستند المستخدم من الـ Firestore لمعرفة الـ Role المسموح له
+            // جلب مستند المستخدم من الـ Firestore
             const userDoc = await getDoc(doc(db, "users", user.uid));
 
             if (userDoc.exists()) {
                 const userData = userDoc.data();
                 const role = userData.role;
 
-                // التوجيه التلقائي الذكي بناءً على صلاحيات الحساب (Role-based Routing)
+                // التوجيه التلقائي الذكي بناءً على صلاحيات الحساب وحالته
                 if (role === "admin") {
                     window.location.href = "../admin/dashboard.html";
-                } else if (role === "student") {
+                } 
+                else if (role === "student") {
+                    // 🚨 جدار الحماية: الفحص الذكي لحالة حساب الطالب قبل الدخول للداشبورد
+                    if (userData.status === "pending") {
+                        showError("⚠️ حسابك قيد المراجعة حالياً من قِبل الإدارة. سيتم تفعيله فور التأكد من صحة الكارنيه.");
+                        await signOut(auth); // تسجيل خروج فوراً عشان الحساب ميفضلش مفتوح
+                        return;
+                    } 
+                    else if (userData.status === "rejected") {
+                        showError("❌ عذراً، تم رفض طلب انضمامك للمنصة بناءً على مراجعة صورة الكارنيه المرفقة.");
+                        await signOut(auth);
+                        return;
+                    }
+
+                    // لو الحساب approved هيدخل عادي جداً هنا:
                     window.location.href = "../student/book-trip.html";
-                } else if (role === "driver") {
+                } 
+                else if (role === "driver") {
                     window.location.href = "../driver/profile.html";
-                } else {
+                } 
+                else {
                     showError("نوع الحساب غير معرف داخل المنصة.");
                 }
             } else {

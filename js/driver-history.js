@@ -30,7 +30,6 @@ async function loadDriverHistory(driverUid) {
             destSnapshot.forEach((doc) => {
                 const destData = doc.data();
                 if (destData.name) {
-                    // عمل trim() للاسم لتفادي أي مسافات زائدة في قاعدة البيانات تمنع المطابقة
                     destinationsPrices[destData.name.trim()] = Number(destData.price) || 0;
                 }
             });
@@ -67,14 +66,29 @@ async function loadDriverHistory(driverUid) {
             }
             
             const type = booking.tripType || "ذهاب";
-            const timeDisplay = (type === "ذهاب") ? booking.goTime : booking.returnTime;
-            const destination = booking.destination || "غير محدد";
             
-            // تنظيف اسم الوجهة لمطابقتها مع السعر الحقيقي
+            // 🛠️ تحسين عرض الوقت: لو ذهاب وعودة يظهر الوقتين مع بعض بشكل شيك
+            let timeDisplay = "";
+            if (type === "ذهاب") {
+                timeDisplay = booking.goTime || "---";
+            } else if (type === "عودة") {
+                timeDisplay = booking.returnTime || "---";
+            } else if (type === "ذهاب وعودة") {
+                timeDisplay = `ذهاب: ${booking.goTime || '---'} | عودة: ${booking.returnTime || '---'}`;
+            }
+            
+            const destination = booking.destination || "غير محدد";
             const cleanDest = destination.trim();
             
-            // 🌟 تحديث السعر بناءً على الأسعار الحقيقية من الـ Firestore، وإذا لم يجدها يضع القيمة الافتراضية
-            booking.realPrice = (cleanDest in destinationsPrices) ? destinationsPrices[cleanDest] : (Number(booking.price) || 25);
+            // 💵 جلب السعر الأساسي للاتجاه الواحد أولاً
+            const basePrice = (cleanDest in destinationsPrices) ? destinationsPrices[cleanDest] : (Number(booking.price) || 25);
+            
+            // 🌟 التعديل الجوهري هنا: لو الرحلة ذهاب وعودة بنضاعف عائد التذكرة للطالب ده
+            if (type === "ذهاب وعودة") {
+                booking.realPrice = basePrice * 2;
+            } else {
+                booking.realPrice = basePrice;
+            }
             
             const uniqueTripKey = `${dateKey}_${type}_${timeDisplay}_${destination}`;
             
@@ -91,18 +105,14 @@ async function loadDriverHistory(driverUid) {
             groupedTrips[uniqueTripKey].bookingsList.push(booking);
         });
 
-        // تحويل الكائن لمصفوفة
+        // تحويل الكائن لمصفوفة وترتيبها
         const finalTripsArray = Object.values(groupedTrips);
-
-        // ترتيب الرحلات من الأحدث للأقدم بناءً على وقت الإنشاء
         finalTripsArray.sort((a, b) => b.dateObject - a.dateObject);
 
         if (totalArchivedCount) totalArchivedCount.textContent = `${finalTripsArray.length} رحلة مؤرشفة`;
 
         // رندر الرحلات ديناميكياً داخل الجدول
         finalTripsArray.forEach((trip, index) => {
-            
-            // حساب رقم الرحلة (بحيث أقدم رحلة تبقى رقم 1، والأحدث تأخذ الرقم الأعلى)
             const tripNumber = finalTripsArray.length - index;
             
             let formattedDate = "---";
@@ -117,7 +127,7 @@ async function loadDriverHistory(driverUid) {
                 <td class="fw-bold text-primary">رحلة رقم (${tripNumber})</td>
                 <td><i class="fa-solid fa-location-dot text-danger me-1"></i> ${trip.destination}</td>
                 <td><span class="badge bg-secondary px-2 py-1">${trip.tripType}</span></td>
-                <td><span class="text-muted"><i class="fa-regular fa-clock me-1 text-primary"></i> ${trip.time || '---'}</span></td>
+                <td><span class="text-muted small"><i class="fa-regular fa-clock me-1 text-primary"></i> ${trip.time}</span></td>
                 <td><span class="badge bg-success text-white px-2 py-1"><i class="fa-solid fa-check me-1"></i> مدفوع (كاش)</span></td>
                 <td class="text-muted">${formattedDate}</td>
                 <td>
@@ -140,9 +150,8 @@ async function loadDriverHistory(driverUid) {
     }
 }
 
-// 4. دالة فتح وعرض تفاصيل الرحلة المؤرشفة داخل الـ Modal (مزامنة كاملة مع الأسعار الحقيقية)
+// 4. دالة فتح وعرض تفاصيل الرحلة المؤرشفة داخل الـ Modal
 function showTripDetails(tripNumber, tripBookings, tripSummary) {
-    
     const destElem = document.getElementById("modalTripDestination");
     const timeElem = document.getElementById("modalTripTime");
     const countElem = document.getElementById("modalTripStudentsCount");
@@ -156,24 +165,21 @@ function showTripDetails(tripNumber, tripBookings, tripSummary) {
         return;
     }
 
-    // تعيين البيانات الأساسية في الـ Modal
     if (idElem) idElem.textContent = tripNumber;
     if (destElem) destElem.textContent = tripSummary.destination || "غير محدد";
     if (timeElem) timeElem.textContent = `${tripSummary.time || '---'} (${tripSummary.tripType || 'ذهاب'})`;
     if (countElem) countElem.textContent = tripBookings.length;
 
-    // 🧮 حساب إجمالي مبلغ الرحلة بناءً على السعر الحقيقي المسترجع
+    // حساب إجمالي مبلغ الرحلة بناءً على السعر الحقيقي المسترجع والمعدل فوق 🧮
     let totalTripAmount = 0;
     
     if (listContainer) {
-        listContainer.innerHTML = ""; // تصفير القائمة السابقة
+        listContainer.innerHTML = ""; 
 
         tripBookings.forEach((booking, index) => {
-            // استخدام السعر الحقيقي المرتبط بالوجهة والذي تم حسابه في دالة التجميع
             const ticketPrice = Number(booking.realPrice) || 25; 
             totalTripAmount += ticketPrice;
 
-            // بناء سطر الطالب داخل الـ Modal متوافق مع التصميم
             const li = document.createElement("li");
             li.className = "list-group-item d-flex justify-content-between align-items-center text-end py-3";
             li.innerHTML = `
@@ -189,17 +195,14 @@ function showTripDetails(tripNumber, tripBookings, tripSummary) {
         });
     }
 
-    // 💵 طباعة إجمالي المبلغ النهائي المحسوب بدقة
     if (amountElem) {
         amountElem.textContent = totalTripAmount;
     }
 
-    // فتح الـ Modal بأسلوب الـ Bootstrap 5 الآمن
     let myModal = bootstrap.Modal.getInstance(modalElement);
     if (!myModal) {
         myModal = new bootstrap.Modal(modalElement);
     }
-    
     myModal.show();
 }
 
