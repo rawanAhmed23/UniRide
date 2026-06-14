@@ -15,12 +15,14 @@ const bookingForm = document.getElementById("bookingForm");
 const confirmBookingBtn = document.getElementById("confirmBookingBtn");
 const bookingsTable = document.getElementById("studentBookingsTable");
 const logoutBtn = document.getElementById("logoutBtn");
+const welcomeStudentName = document.getElementById("welcomeStudentName");
 
 let destinationsData = {}; 
 let driversData = {}; // لتخزين بيانات السائقين الذين تم جلبهم للخط المختار
 let currentStudentUid = null;
 let currentStudentName = "طالب مشترك"; // 👈 متغير عالمي لتخزين اسم الطالب الفعلي
 let selectedBasePrice = 0;
+
 
 // 1. التأكد من هوية الطالب وجلسة تسجيل الدخول وجلب اسمه
 onAuthStateChanged(auth, async (user) => {
@@ -29,14 +31,23 @@ onAuthStateChanged(auth, async (user) => {
     } else {
         currentStudentUid = user.uid;
         
+        // نضع كلمة جاري التحميل مؤقتاً لحد ما الـ Firestore ترد علينا
+        welcomeStudentName.textContent = "جاري التحميل..."; 
+
         try {
             // 🔍 جلب مستند الطالب لقراءة اسمه الحقيقي ونقله للحجوزات
             const userDoc = await getDoc(doc(db, "users", user.uid));
             if (userDoc.exists()) {
                 currentStudentName = userDoc.data().name || "طالب مشترك";
+                
+                // 🌟 هنا السر! بنحدث النص في الصفحة بعد ما الاسم رجع من الداتابيز فعلياً
+                welcomeStudentName.textContent = currentStudentName;
+            } else {
+                welcomeStudentName.textContent = "طالب مشترك";
             }
         } catch (err) {
             console.error("Error fetching student profile name:", err);
+            welcomeStudentName.textContent = "طالب مشترك"; // حماية في حالة حدوث خطأ في الشبكة
         }
 
         loadDestinations();

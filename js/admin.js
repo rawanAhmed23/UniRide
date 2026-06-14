@@ -3,9 +3,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getAuth, signOut, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import {
     collection, doc, setDoc, updateDoc, deleteDoc, addDoc,
-    onSnapshot, query, orderBy, getDocs
+    onSnapshot, query, orderBy, getDocs, where // 🌟 أضفنا where هنا للفلترة
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { checkAccess } from "../js/auth-guard.js";
+
 checkAccess("admin"); // لن يفتح الصفحة إلا لو كان أدمن فعلاً
 
 // إنشاء تطبيق فايربيز ثانوي مخصص لتكريت حسابات السائقين بدون تسجيل خروج الأدمن
@@ -22,34 +23,30 @@ const destTableBody = document.getElementById("destinationsTableBody");
 const destinationForm = document.getElementById("destinationForm");
 const assignedDestinationSelect = document.getElementById("assignedDestination");
 
+// 🌟 متغيرات نظام الـ Pagination الخاص بالسائقين
+let allDrivers = [];           // لتخزين كائنات السائقين بعد جلب عدد رحلاتهم
+let currentDriversPage = 1;    // الصفحة الحالية
+const driversRowsPerPage = 5;  // عدد السائقين المعروضين في الصفحة الواحدة
 
 const logoutBtn = document.getElementById('logoutBtn');
 
 if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
         const auth = getAuth();
-
         signOut(auth).then(() => {
-            // تسجيل خروج ناجح
             console.log("تم تسجيل الخروج بنجاح");
-            // تحويل المستخدم إلى صفحة تسجيل الدخول
             window.location.href = "../auth/login.html";
         }).catch((error) => {
-            // حدث خطأ
             console.error("حدث خطأ أثناء تسجيل الخروج:", error);
             alert("فشل تسجيل الخروج، حاول مرة أخرى.");
         });
     });
 }
 
-
 function formatDateForInput(dateStr) {
     if (!dateStr || typeof dateStr !== 'string') return "";
-    
-    // لو التاريخ جاي بالفعل بالصيغة المطلوبة، رجعه زي ما هو
     if (dateStr.includes("-") && dateStr.split("-")[0].length === 4) return dateStr;
 
-    // لو التاريخ جاي بصيغة DD-MM-YYYY، حوله لـ YYYY-MM-DD
     const parts = dateStr.split("-");
     if (parts.length === 3) {
         const day = parts[0].padStart(2, '0');
@@ -59,97 +56,199 @@ function formatDateForInput(dateStr) {
     }
     return dateStr;
 }
+
 // ==========================================
 // دالة لجلب خطوط السير ووضعها في الـ Dropdown ديناميكياً
 // ==========================================
 async function populateDestinationsDropdown() {
     const selectElement = document.getElementById("assignedDestination");
-
-    if (!selectElement) {
-        console.error("خطأ: عنصر الـ select بالـ id 'assignedDestination' غير موجود في صفحة الـ HTML!");
-        return;
-    }
+    if (!selectElement) return;
 
     try {
         const querySnapshot = await getDocs(collection(db, "destinations"));
-
-        // تنظيف القائمة قبل التعبئة
         selectElement.innerHTML = '<option value="" selected disabled>اختر الوجهة الثابتة...</option>';
-
-        if (querySnapshot.empty) {
-            console.warn("تحذير: لا توجد وجهات في قاعدة البيانات (collection: destinations)!");
-        }
 
         querySnapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            // تأكدي إن الحقل اسمه 'name' في قاعدة البيانات
             if (data.name) {
                 const option = document.createElement("option");
                 option.value = data.name;
                 option.textContent = data.name;
                 selectElement.appendChild(option);
-            } else {
-                console.log("وجدت document لكن لا يحتوي على حقل باسم 'name':", docSnap.id);
             }
         });
-        console.log("تم تعبئة القائمة بنجاح");
-
     } catch (error) {
-        console.error("خطأ أثناء جلب الوجهات من Firestore: ", error);
+        console.error("خطأ أثناء جلب الوجهات: ", error);
     }
 }
+
 // ==========================================
-// 1. الجزء الخاص بإدارة السائقين (Drivers CRUD)
+// 1. الجزء الخاص بإدارة السائقين (Drivers CRUD) المطور
 // ==========================================
+
+// الاستماع للسائقين بشكل لحظي وحساب رحلاتهم
 function listenToDrivers() {
     if (!driversTableBody) return;
 
-    onSnapshot(collection(db, "users"), (snapshot) => {
-        driversTableBody.innerHTML = "";
-        snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            if (data.role === "driver") {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
-                    <td>${data.name || 'غير مسجل'}</td>
-                    <td>${data.carType || 'ملاكي'} (${data.carModel || '2024'})</td>
-                    <td><span class="badge bg-secondary">${data.plateNumber || '---'}</span></td>
-                    <td><span class="badge bg-info text-dark">${data.assignedDestination || 'لم يتم التعيين'}</span></td> 
-                    <td>${data.baseSalary || 0} ج.م</td>
-                    <td>${data.driverLicenseExpiry || '---'}</td>
-                    <td>
-                        <button class="btn btn-sm btn-warning me-1 edit-btn" data-id="${docSnap.id}">تعديل</button>
-                        <button class="btn btn-sm btn-danger delete-btn" data-id="${docSnap.id}">حذف</button>
-                    </td>
-                `;
-                driversTableBody.appendChild(tr);
+    // رندرة مؤشر تحميل مبدئي
+    driversTableBody.innerHTML = `<tr><td colspan="8" class="text-center py-3 text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>جاري تحميل السائقين وحساب الرحلات...</td></tr>`;
 
-                tr.querySelector(".edit-btn").addEventListener("click", () => startEdit(docSnap.id, data));
-                tr.querySelector(".delete-btn").addEventListener("click", () => deleteDriver(docSnap.id));
+    onSnapshot(collection(db, "users"), async (snapshot) => {
+        const driverDocs = snapshot.docs.filter(docSnap => docSnap.data().role === "driver");
+
+        // جلب عدد الرحلات المنتهية لكل سائق بالتوازي وبكفاءة
+        allDrivers = await Promise.all(driverDocs.map(async (docSnap) => {
+            const data = docSnap.data();
+            const driverId = docSnap.id;
+
+            try {
+                // عمل كويري لعد الرحلات المسندة للسائق وحالتها "منتهية"
+                const bookingsQuery = query(
+                    collection(db, "bookings"),
+                    where("driverId", "==", driverId),
+                    where("status", "==", "منتهية")
+                );
+                const bookingsSnap = await getDocs(bookingsQuery);
+
+                return {
+                    id: driverId,
+                    ...data,
+                    completedTrips: bookingsSnap.size // حفظ العدد داخل حقل ديناميكي
+                };
+            } catch (err) {
+                console.error(`خطأ في جلب رحلات السائق ${driverId}:`, err);
+                return { id: driverId, ...data, completedTrips: 0 };
             }
-        });
+        }));
+
+        // للتأكد من ألا تخرج الصفحة الحالية عن النطاق بعد عمليات الحذف
+        const totalPages = Math.ceil(allDrivers.length / driversRowsPerPage);
+        if (currentDriversPage > totalPages && totalPages > 0) {
+            currentDriversPage = totalPages;
+        }
+
+        displayDriversTable(); // رندرة الجدول بناءً على الصفحة الحالية
     });
 }
 
-// 2. نظام استقبال التنبيهات (أضيفيه لصفحة الأدمن)
+// دالة رندرة صفحة الجدول الحالية والتحكم في الـ Pagination
+function displayDriversTable() {
+    if (!driversTableBody) return;
+    driversTableBody.innerHTML = "";
+
+    if (allDrivers.length === 0) {
+        //  السطر الصحيح بعد التعديل
+        driversTableBody.innerHTML = "<tr><td colspan='8' class='text-center py-3 text-muted'>لا يوجد سائقين مسجلين حالياً.</td></tr>";
+        updatePaginationControls(0);
+        return;
+    }
+
+    // حساب بداية ونهاية مصفوفة السائقين للصفحة الحالية
+    const startIndex = (currentDriversPage - 1) * driversRowsPerPage;
+    const endIndex = Math.min(startIndex + driversRowsPerPage, allDrivers.length);
+    const paginatedDrivers = allDrivers.slice(startIndex, endIndex);
+
+    // تحديث نص العداد أسفل الجدول
+    const paginationInfo = document.getElementById("paginationInfo");
+    if (paginationInfo) {
+        paginationInfo.textContent = `عرض السائقين من ${startIndex + 1} إلى ${endIndex} (إجمالي ${allDrivers.length} سائق)`;
+    }
+
+    // رندرة السطور المحددة
+    paginatedDrivers.forEach((driver) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td class="fw-bold text-dark">${driver.name || 'غير مسجل'}</td>
+            <td>${driver.carType || 'ملاكي'} (${driver.carModel || '2024'})</td>
+            <td><span class="badge bg-secondary">${driver.plateNumber || '---'}</span></td>
+            <td><span class="badge bg-info text-dark">${driver.assignedDestination || 'لم يتم التعيين'}</span></td> 
+            
+            <td>
+                <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fw-bold">
+                    <i class="fa-solid fa-route me-1"></i> ${driver.completedTrips || 0} رحلة
+                </span>
+            </td>
+            
+            <td class="fw-bold text-primary">${driver.baseSalary || 0} ج.م</td>
+            <td>${driver.driverLicenseExpiry || '---'}</td>
+            <td>
+                <button class="btn btn-sm btn-warning me-1 edit-btn">تعديل</button>
+                <button class="btn btn-sm btn-danger delete-btn">حذف</button>
+            </td>
+        `;
+        driversTableBody.appendChild(tr);
+
+        // ربط الأحداث بالكائنات الحالية مباشرة ونظيفة
+        tr.querySelector(".edit-btn").addEventListener("click", () => startEdit(driver.id, driver));
+        tr.querySelector(".delete-btn").addEventListener("click", () => deleteDriver(driver.id));
+    });
+
+    const totalPages = Math.ceil(allDrivers.length / driversRowsPerPage);
+    updatePaginationControls(totalPages);
+}
+
+// دالة رندرة أزرار الـ Pagination أسفل الجدول ديناميكياً
+function updatePaginationControls(totalPages) {
+    const container = document.getElementById("paginationContainer");
+    if (!container) return;
+    container.innerHTML = "";
+
+    if (totalPages <= 1) {
+        if (container.parentElement) container.parentElement.classList.add('d-none');
+        return;
+    }
+    if (container.parentElement) container.parentElement.classList.remove('d-none');
+
+    // 1️⃣ زر السابق
+    const prevLi = document.createElement("li");
+    prevLi.className = `page-item ${currentDriversPage === 1 ? 'disabled' : ''}`;
+    prevLi.innerHTML = `<a class="page-link" href="#">السابق</a>`;
+    prevLi.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (currentDriversPage > 1) {
+            currentDriversPage--;
+            displayDriversTable();
+        }
+    });
+    container.appendChild(prevLi);
+
+    // 2️⃣ أرقام الصفحات المعروضة
+    for (let i = 1; i <= totalPages; i++) {
+        const pageLi = document.createElement("li");
+        pageLi.className = `page-item ${currentDriversPage === i ? 'active' : ''}`;
+        pageLi.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+        pageLi.addEventListener("click", (e) => {
+            e.preventDefault();
+            currentDriversPage = i;
+            displayDriversTable();
+        });
+        container.appendChild(pageLi);
+    }
+
+    // 3️⃣ زر التالي
+    const nextLi = document.createElement("li");
+    nextLi.className = `page-item ${currentDriversPage === totalPages ? 'disabled' : ''}`;
+    nextLi.innerHTML = `<a class="page-link" href="#">التالي</a>`;
+    nextLi.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (currentDriversPage < totalPages) {
+            currentDriversPage++;
+            displayDriversTable();
+        }
+    });
+    container.appendChild(nextLi);
+}
+
+// نظام استقبال التنبيهات لايف
 function listenToNotifications() {
     const q = query(collection(db, "notifications"), orderBy("timestamp", "desc"));
-
-    // تعريف متغير لتخزين وقت بدء الصفحة
     const startTime = Date.now();
 
     onSnapshot(q, (snapshot) => {
-        // نستخدم docChanges بدلاً من forEach
         snapshot.docChanges().forEach((change) => {
-            // نتأكد أن التغيير هو "إضافة" (added) وليس تعديل
             if (change.type === "added") {
                 const data = change.doc.data();
-
-                // شرط إضافي: نتأكد أن التنبيه تم إنشاؤه بعد تحميل الصفحة 
-                // (عشان نتجنب ظهور التنبيهات القديمة عند عمل Refresh)
                 if (data.timestamp && data.timestamp.toMillis() > startTime - 5000) {
-
-                    // هنا نظهر التنبيه
                     alert(`🔔 تنبيه جديد: ${data.driverName} قام بـ ${data.message}`);
                 }
             }
@@ -172,12 +271,9 @@ function startEdit(id, data) {
     document.getElementById("carModel").value = data.carModel || '';
     document.getElementById("plateNumber").value = data.plateNumber || '';
     document.getElementById("maxPassengers").value = data.maxPassengers || '';
-// سطر 114
-document.getElementById("driverLicenseExpiry").value = data.driverLicenseExpiry ? formatDateForInput(data.driverLicenseExpiry) : "";
 
-// سطر 115
-document.getElementById("carLicenseExpiry").value = data.carLicenseExpiry ? formatDateForInput(data.carLicenseExpiry) : "";
-
+    document.getElementById("driverLicenseExpiry").value = data.driverLicenseExpiry ? formatDateForInput(data.driverLicenseExpiry) : "";
+    document.getElementById("carLicenseExpiry").value = data.carLicenseExpiry ? formatDateForInput(data.carLicenseExpiry) : "";
     document.getElementById("baseSalary").value = data.baseSalary || '';
 
     if (assignedDestinationSelect) {
@@ -220,15 +316,13 @@ if (driverForm) {
                 });
                 alert("تم تحديث بيانات السائق والخط بنجاح!");
                 cancelEditBtn.click();
-                listenToDrivers();
+                // 🌟 تمت إزالة استدعاء listenToDrivers التكراري لأن الـ onSnapshot يراقب live
             } catch (err) { alert("خطأ في التحديث: " + err.message); }
         } else {
             try {
-                // استخدام الـ secondaryAuth لمنع خروج الأدمن الحالي
                 const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, nationalId);
                 const user = userCredential.user;
 
-                // التخزين في كوليكشن users الموحد الذي يعتمد عليه كود الـ Login
                 await setDoc(doc(db, "users", user.uid), {
                     uid: user.uid, name, nationalId, email, carType, carModel, plateNumber,
                     maxPassengers: parseInt(maxPassengers), driverLicenseExpiry, carLicenseExpiry, baseSalary: parseFloat(baseSalary),
@@ -237,7 +331,7 @@ if (driverForm) {
 
                 alert("تم إنشاء حساب السائق وتعيين الخط! الباسورد هو الرقم القومي.");
                 driverForm.reset();
-                listenToDrivers();
+                // 🌟 تمت إزالة استدعاء listenToDrivers التكراري
             } catch (err) { alert("خطأ أثناء إضافة السائق: " + err.message); }
         }
     });
@@ -248,7 +342,7 @@ async function deleteDriver(id) {
         try {
             await deleteDoc(doc(db, "users", id));
             alert("تم الحذف بنجاح.");
-            listenToDrivers();
+            // 🌟 تمت إزالة استدعاء listenToDrivers التكراري
         } catch (err) { alert("خطأ في الحذف: " + err.message); }
     }
 }
@@ -298,7 +392,7 @@ if (destinationForm) {
 async function deleteDestination(id) {
     if (confirm("هل تريد حذف هذه الوجهة؟")) {
         try {
-            await deleteDoc(doc(doc(db, "destinations", id)));
+            await deleteDoc(doc(db, "destinations", id));
             alert("تم الحذف.");
             fetchDestinations();
         } catch (err) { alert(err.message); }
@@ -342,7 +436,6 @@ async function initDashboard() {
         bookingsSnapshot.forEach(docSnap => {
             const booking = docSnap.data();
             totalRevenueSum += booking.totalCost || 0;
-            // تعديل السطر ده هنا منِعاً للـ Crash الاستباقي للوحة الإحصائيات:
             if (booking.destination && destinationStats[booking.destination]) {
                 destinationStats[booking.destination].students += 1;
             }
@@ -377,16 +470,15 @@ async function initDashboard() {
     } catch (error) { console.error("Dashboard error: ", error); }
 }
 
-// تشغيل الدوال بذكاء حسب عناصر الصفحة الحالية لتجنب أخطاء المتصفح
+// تشغيل الدوال بذكاء حسب عناصر الصفحة الحالية لتجنب أخطاء المتصفح والتكرار
 document.addEventListener("DOMContentLoaded", async () => {
     if (assignedDestinationSelect) {
         await populateDestinationsDropdown();
     }
-    listenToDrivers();
-    listenToNotifications();
     if (driversTableBody) {
-        listenToDrivers();
+        listenToDrivers(); // 🌟 يتم تشغيله مرة واحدة نظيفة هنا فقط ويراقب لايف
     }
+    listenToNotifications();
     if (destTableBody) {
         fetchDestinations();
     }

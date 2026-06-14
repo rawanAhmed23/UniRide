@@ -3,10 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>الشكاوى والمقترحات - لوحة الأدمن UniRide</title>
+    <title>إدارة الشكاوى والدعم - UniRide Admin</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        .users-list {
+            height: 450px;
+            overflow-y: auto;
+        }
+        .chat-box {
+            height: 390px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+        }
+        .user-item {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .user-item:hover, .user-item.active {
+            background-color: #e9ecef !important;
+        }
+        .msg {
+            max-width: 75%;
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 15px;
+        }
+        .msg-student {
+            background-color: #e9ecef;
+            color: #212529;
+            margin-left: auto; /* محاذاة لليمين عند الأدمن لأنها جاية من الطالب */
+            border-bottom-right-radius: 2px;
+        }
+        .msg-admin {
+            background-color: #0d6efd;
+            color: white;
+            margin-right: auto; /* محاذاة لليسار لأنها رسالة الأدمن الحالية */
+            border-bottom-left-radius: 2px;
+        }
+    </style>
 </head>
 <body class="bg-light">
 
@@ -29,44 +65,40 @@
         </div>
     </nav>
 
-    <div class="container mb-5">
-        <h2 class="fw-bold mb-4">💬 صندوق الشكاوى والمقترحات والدعم الفني</h2>
-
-        <div class="row g-4">
-            <div class="col-lg-4">
+    <div class="container-fluid px-4">
+        <div class="row">
+            <div class="col-md-4 mb-4">
                 <div class="card shadow-sm border-0 rounded-3">
-                    <div class="card-header bg-dark text-white fw-bold">
-                        <i class="fa-solid fa-list-check me-1"></i> الرسائل الواردة
+                    <div class="card-header bg-secondary text-white fw-bold">
+                        <i class="fa-solid fa-users me-2"></i>المحادثات النشطة
                     </div>
-                    <div class="list-group list-group-flush" id="ticketsList" style="max-height: 500px; overflow-y: auto;">
-                        <div class="p-3 text-center text-muted">جاري تحميل الرسائل...</div>
+                    <div class="list-group list-group-flush users-list" id="usersListContainer">
+                        <div class="text-center text-muted p-4" id="loadingUsers">
+                            <i class="fa-solid fa-spinner fa-spin mb-2"></i> جاري تحميل قائمة الطلاب...
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="col-lg-8">
-                <div class="card shadow-sm border-0 rounded-3 d-flex flex-column" style="height: 550px;">
+            <div class="col-md-8 mb-4">
+                <div class="card shadow-sm border-0 rounded-3">
                     <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
-                        <div>
-                            <i class="fa-solid fa-comments me-1"></i> 
-                            <span id="chatWithUsername">اختر مستخدماً لبدء المحادثة</span>
-                        </div>
-                        <span class="badge bg-light text-dark small" id="userRoleBadge" style="display:none;"></span>
+                        <span><i class="fa-solid fa-comments me-2"></i>نافذة الرد الفوري</span>
+                        <span class="badge bg-light text-dark small" id="activeChatTarget">اختر طالباً لبدء الرد</span>
                     </div>
                     
-                    <div class="card-body bg-white p-3 d-flex flex-column" id="chatBox" style="overflow-y: auto; flex-grow: 1;">
-                        <div class="text-center my-auto text-muted">
-                            <i class="fa-solid fa-comment-slash fs-1 d-block mb-2"></i>
-                            الرجاء تحديد محادثة من القائمة الجانبية لعرض التفاصيل والرد.
+                    <div class="card-body chat-box d-flex flex-column p-3" id="adminChatContainer">
+                        <div class="text-center text-muted my-auto" id="placeholderChat">
+                            <i class="fa-solid fa-comment-dots fa-3x mb-3 text-secondary"></i>
+                            <p>برجاء اختيار أحد الطلاب من القائمة الجانبية لعرض تفاصيل الشكوى والرد عليها حياً.</p>
                         </div>
                     </div>
 
-                    <div class="card-footer bg-light border-0 p-3">
-                        <form id="replyForm" class="d-flex gap-2">
-                            <input type="hidden" id="activeChatId">
-                            <input type="text" class="form-control" id="replyMessage" placeholder="اكتب ردك هنا..." disabled required>
-                            <button type="submit" class="btn btn-primary px-4 fw-bold" id="sendBtn" disabled>
-                                <i class="fa-solid fa-paper-plane"></i>
+                    <div class="card-footer bg-white border-top-0 p-3">
+                        <form id="adminChatForm" class="d-flex gap-2">
+                            <input type="text" id="adminMessageInput" class="form-control" placeholder="اكتب رد الدعم الفني هنا..." required disabled>
+                            <button type="submit" class="btn btn-dark px-4 fw-bold" id="adminSendBtn" disabled>
+                                <i class="fa-solid fa-paper-plane"></i> رد
                             </button>
                         </form>
                     </div>
@@ -77,139 +109,138 @@
 
     <script type="module">
         import { db } from "../js/firebase-config.js";
-        import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { collection, addDoc, query, orderBy, onSnapshot, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        const ticketsList = document.getElementById("ticketsList");
-        const chatBox = document.getElementById("chatBox");
-        const chatWithUsername = document.getElementById("chatWithUsername");
-        const userRoleBadge = document.getElementById("userRoleBadge");
-        const replyForm = document.getElementById("replyForm");
-        const replyMessage = document.getElementById("replyMessage");
-        const sendBtn = document.getElementById("sendBtn");
-        const activeChatIdInput = document.getElementById("activeChatId");
+        const usersListContainer = document.getElementById("usersListContainer");
+        const adminChatContainer = document.getElementById("adminChatContainer");
+        const adminMessageInput = document.getElementById("adminMessageInput");
+        const adminSendBtn = document.getElementById("adminSendBtn");
+        const adminChatForm = document.getElementById("adminChatForm");
+        const activeChatTarget = document.getElementById("activeChatTarget");
 
-        let unsubscribeMessages = null;
+        let selectedStudentUid = null;
+        let selectedStudentName = "";
+        let unsubscribeCurrentChat = null; // لإغلاق المستمع القديم عند التنقل بين الطلاب
 
-        // 1. جلب قائمة تذاكر الشات (المحادثات النشطة)
-        function loadChatTickets() {
-            const q = query(collection(db, "support_chats"), orderBy("lastMessageTime", "desc"));
-            
+        // 1. الاستماع الحي لجميع الرسائل لتجميع الطلاب الفريدين في القائمة الجانبية
+        function loadActiveChatsList() {
+            const q = query(collection(db, "support_chats"), orderBy("createdAt", "desc"));
+
             onSnapshot(q, (snapshot) => {
-                ticketsList.innerHTML = "";
-                if (snapshot.empty) {
-                    ticketsList.innerHTML = "<div class='p-3 text-center text-muted'>لا توجد شكاوى أو رسائل حالياً.</div>";
+                const loadingUsers = document.getElementById("loadingUsers");
+                if (loadingUsers) loadingUsers.remove();
+
+                usersListContainer.innerHTML = "";
+                
+                // استخدام الـ Map لمنع تكرار الطلاب وعرض آخر رسالة فقط لكل طالب
+                const uniqueStudents = new Map();
+
+                snapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    if (data.studentUid && !uniqueStudents.has(data.studentUid)) {
+                        uniqueStudents.set(data.studentUid, {
+                            name: data.studentName || "طالب مجهول",
+                            lastMessage: data.message,
+                            uid: data.studentUid
+                        });
+                    }
+                });
+
+                if (uniqueStudents.size === 0) {
+                    usersListContainer.innerHTML = `<div class="text-center text-muted p-4">لا توجد شكاوى أو محادثات حالياً.</div>`;
                     return;
                 }
 
-                snapshot.forEach((docSnap) => {
-                    const chat = docSnap.data();
-                    const chatId = docSnap.id;
-                    
+                uniqueStudents.forEach((student) => {
                     const button = document.createElement("button");
-                    button.className = "list-group-item list-group-item-action p-3 border-bottom text-start";
-                    // تمييز المحادثات غير المقروءة من قبل الأدمن
-                    if (chat.adminUnread) {
-                        button.classList.add("bg-warning-subtle", "fw-bold");
+                    button.className = `list-group-item list-group-item-action user-item p-3 d-flex flex-column align-items-start ${selectedStudentUid === student.uid ? 'active' : ''}`;
+                    button.innerHTML = `
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1 fw-bold text-dark">${student.name}</h6>
+                        </div>
+                        <p class="mb-1 small text-muted text-truncate w-100" style="max-width: 280px;">${student.lastMessage}</p>
+                    `;
+                    
+                    button.addEventListener("click", () => selectStudentForChat(student.uid, student.name));
+                    usersListContainer.appendChild(button);
+                });
+            });
+        }
+
+        // 2. تفعيل الشات المباشر مع طالب معين عند الضغط عليه
+        function selectStudentForChat(studentUid, studentName) {
+            selectedStudentUid = studentUid;
+            selectedStudentName = studentName;
+            activeChatTarget.textContent = `محادثة: ${studentName}`;
+            
+            // تفعيل حقل الكتابة والزرار للرد
+            adminMessageInput.disabled = false;
+            adminSendBtn.disabled = false;
+            adminMessageInput.focus();
+
+            // إعادة بناء القائمة الجانبية لتحديث الـ Active class
+            document.querySelectorAll(".user-item").forEach(item => {
+                if(item.querySelector("h6").textContent === studentName) item.classList.add("active");
+                else item.classList.remove("active");
+            });
+
+            // لو فيه مستمع قديم شغال لشكاوى طالب آخر نقفله الأول عشان الأداء
+            if (unsubscribeCurrentChat) unsubscribeCurrentChat();
+
+            // الاستماع لرسائل هذا الطالب بالتحديد مرتبة تصاعدياً
+            const chatQuery = query(
+                collection(db, "support_chats"),
+                where("studentUid", "==", studentUid),
+                orderBy("createdAt", "asc")
+            );
+
+            unsubscribeCurrentChat = onSnapshot(chatQuery, (snapshot) => {
+                adminChatContainer.innerHTML = "";
+
+                snapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const msgDiv = document.createElement("div");
+
+                    if (data.sender === "student") {
+                        msgDiv.className = "msg msg-student";
+                        msgDiv.innerHTML = `<strong>${data.studentName}:</strong> <br> ${data.message}`;
+                    } else {
+                        msgDiv.className = "msg msg-admin";
+                        msgDiv.textContent = data.message;
                     }
 
-                    button.innerHTML = `
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="text-dark">${chat.userName || "مستخدم مجهول"}</span>
-                            <span class="badge bg-secondary px-2 py-1" style="font-size: 10px;">${chat.userRole || "طالب"}</span>
-                        </div>
-                        <p class="text-muted small text-truncate mb-0" style="max-width: 230px;">${chat.lastMessage || "لا توجد رسائل"}</p>
-                    `;
-
-                    button.addEventListener("click", () => openChat(chatId, chat));
-                    ticketsList.appendChild(button);
+                    adminChatContainer.appendChild(msgDiv);
                 });
-            }, (error) => {
-                console.error("Error fetching chats: ", error);
+
+                adminChatContainer.scrollTop = adminChatContainer.scrollHeight;
             });
         }
 
-        // 2. فتح محادثة معينة وعرض رسائلها
-        function openChat(chatId, chatData) {
-            // تفعيل حقول الإدخال
-            replyMessage.disabled = false;
-            sendBtn.disabled = false;
-            activeChatIdInput.value = chatId;
-            chatWithUsername.innerText = chatData.userName;
-            userRoleBadge.innerText = chatData.userRole || "طالب";
-            userRoleBadge.style.display = "inline-block";
-
-            // إلغاء الاستماع للمحادثة السابقة إن وجد
-            if (unsubscribeMessages) unsubscribeMessages();
-
-            // تحديث حالة القراءة (مارك كـ مقروء للأدمن)
-            if (chatData.adminUnread) {
-                updateDoc(doc(db, "support_chats", chatId), { adminUnread: false });
-            }
-
-            // جلب الرسائل الخاصة بهذه المحادثة
-            const messagesRef = collection(db, "support_chats", chatId, "messages");
-            const q = query(messagesRef, orderBy("timestamp", "asc"));
-
-            unsubscribeMessages = onSnapshot(q, (snapshot) => {
-                chatBox.innerHTML = "";
-                
-                snapshot.forEach((docSnap) => {
-                    const msg = docSnap.data();
-                    const isSenderAdmin = msg.sender === "admin";
-                    
-                    const msgWrapper = document.createElement("div");
-                    msgWrapper.className = `d-flex mb-3 ${isSenderAdmin ? 'justify-content-start' : 'justify-content-end'}`;
-                    
-                    msgWrapper.innerHTML = `
-                        <div class="card p-2 px-3 rounded-3 shadow-sm ${isSenderAdmin ? 'bg-primary text-white' : 'bg-light text-dark'}" style="max-width: 75%;">
-                            <p class="mb-0 small">${msg.text}</p>
-                        </div>
-                    `;
-                    chatBox.appendChild(msgWrapper);
-                });
-                
-                // عمل سكرول تلقائي لأسفل الشات عند وصول رسالة جديدة
-                chatBox.scrollTop = chatBox.scrollHeight;
-            });
-        }
-
-        // 3. إرسال رد الأدمن
-        if (replyForm) {
-            replyForm.addEventListener("submit", async (e) => {
+        // 3. معالجة إرسال رد الأدمن
+        if (adminChatForm) {
+            adminChatForm.addEventListener("submit", async (e) => {
                 e.preventDefault();
-                const chatId = activeChatIdInput.value;
-                const text = replyMessage.value.trim();
-
-                if (!chatId || !text) return;
+                const replyText = adminMessageInput.value.trim();
+                if (!replyText || !selectedStudentUid) return;
 
                 try {
-                    // إضافة الرسالة في الكوليكشن الفرعي (Sub-collection)
-                    await addDoc(collection(db, "support_chats", chatId, "messages"), {
-                        sender: "admin",
-                        text: text,
-                        timestamp: serverTimestamp()
+                    await addDoc(collection(db, "support_chats"), {
+                        studentUid: selectedStudentUid,
+                        studentName: selectedStudentName,
+                        message: replyText,
+                        sender: "admin", // الأدمن هو الراسل
+                        createdAt: new Date()
                     });
 
-                    // تحديث بيانات المحادثة الرئيسية (الأب)
-                    await updateDoc(doc(db, "support_chats", chatId), {
-                        lastMessage: text,
-                        lastMessageTime: serverTimestamp(),
-                        userUnread: true // تنبيه للمستخدم أن هناك رد من الأدمن
-                    });
-
-                    replyForm.reset();
+                    adminMessageInput.value = "";
                 } catch (err) {
-                    console.error("Error sending reply: ", err);
                     alert("فشل إرسال الرد: " + err.message);
                 }
             });
         }
 
-        // تشغيل جلب التذاكر فور فتح الصفحة
-        loadChatTickets();
+        // تشغيل جلب قائمة الطلاب أول ما الصفحة تفتح تلقائياً
+        loadActiveChatsList();
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <script type="module" src="../js/admin.js"></script>
 </body>
 </html>

@@ -23,7 +23,22 @@ async function loadDriverHistory(driverUid) {
     if (!historyTableBody) return;
 
     try {
-        // 🔍 جلب الحجوزات المنتهية للسائق الحالي
+        // 1️⃣ أولاً: جلب أسعار الوجهات الحقيقية من كوليكشن destinations لتحديث الأسعار تلقائياً
+        const destinationsPrices = {};
+        try {
+            const destSnapshot = await getDocs(collection(db, "destinations"));
+            destSnapshot.forEach((doc) => {
+                const destData = doc.data();
+                if (destData.name) {
+                    // عمل trim() للاسم لتفادي أي مسافات زائدة في قاعدة البيانات تمنع المطابقة
+                    destinationsPrices[destData.name.trim()] = Number(destData.price) || 0;
+                }
+            });
+        } catch (destError) {
+            console.error("Error fetching destinations prices:", destError);
+        }
+
+        // 2️⃣ ثانياً: جلب الحجوزات المنتهية للسائق الحالي
         const historyQuery = query(
             collection(db, "bookings"),
             where("driverId", "==", driverUid),
@@ -39,7 +54,7 @@ async function loadDriverHistory(driverUid) {
             return;
         }
 
-        // تجميع الطلاب اللي كانوا في نفس الرحلة
+        // تجميع الطلاب الذين كانوا في نفس الرحلة
         const groupedTrips = {};
 
         querySnapshot.forEach((docSnap) => {
@@ -55,6 +70,12 @@ async function loadDriverHistory(driverUid) {
             const timeDisplay = (type === "ذهاب") ? booking.goTime : booking.returnTime;
             const destination = booking.destination || "غير محدد";
             
+            // تنظيف اسم الوجهة لمطابقتها مع السعر الحقيقي
+            const cleanDest = destination.trim();
+            
+            // 🌟 تحديث السعر بناءً على الأسعار الحقيقية من الـ Firestore، وإذا لم يجدها يضع القيمة الافتراضية
+            booking.realPrice = (cleanDest in destinationsPrices) ? destinationsPrices[cleanDest] : (Number(booking.price) || 25);
+            
             const uniqueTripKey = `${dateKey}_${type}_${timeDisplay}_${destination}`;
             
             if (!groupedTrips[uniqueTripKey]) {
@@ -63,11 +84,10 @@ async function loadDriverHistory(driverUid) {
                     destination: destination,
                     tripType: type,
                     time: timeDisplay,
-                    bookingsList: [] // 👈 تم تغيير اسمها لتخزين مصفوفة حوزات كاملة الكائنات
+                    bookingsList: [] 
                 };
             }
             
-            // 🌟 تعديل هام: بنخزن كائن الحجز بالكامل (booking) مش الاسم بس عشان نقدر نقرأ منه السعر والاسم تحت
             groupedTrips[uniqueTripKey].bookingsList.push(booking);
         });
 
@@ -107,7 +127,6 @@ async function loadDriverHistory(driverUid) {
                 </td>
             `;
 
-            // 🛠️ تعديل هنا: تم تعديل اسم الدالة الصحيح وتمرير كائنات الحجوزات والملخص للرحلة بالكامل
             tr.querySelector(".show-details-btn").addEventListener("click", () => {
                 showTripDetails(tripNumber, trip.bookingsList, trip);
             });
@@ -121,11 +140,9 @@ async function loadDriverHistory(driverUid) {
     }
 }
 
-// 4. دالة فتح وعرض تفاصيل الرحلة المؤرشفة داخل الـ Modal (تم تعديل المعاملات واللوجيك بالكامل)
-// 4. دالة فتح وعرض تفاصيل الرحلة المؤرشفة داخل الـ Modal (مؤمنة بالكامل)
+// 4. دالة فتح وعرض تفاصيل الرحلة المؤرشفة داخل الـ Modal (مزامنة كاملة مع الأسعار الحقيقية)
 function showTripDetails(tripNumber, tripBookings, tripSummary) {
     
-    // التأكد أولاً من وجود عناصر الـ HTML قبل الكتابة فيها تجنباً لأي Crash
     const destElem = document.getElementById("modalTripDestination");
     const timeElem = document.getElementById("modalTripTime");
     const countElem = document.getElementById("modalTripStudentsCount");
@@ -145,19 +162,18 @@ function showTripDetails(tripNumber, tripBookings, tripSummary) {
     if (timeElem) timeElem.textContent = `${tripSummary.time || '---'} (${tripSummary.tripType || 'ذهاب'})`;
     if (countElem) countElem.textContent = tripBookings.length;
 
-    // 🧮 حساب إجمالي مبلغ الرحلة
+    // 🧮 حساب إجمالي مبلغ الرحلة بناءً على السعر الحقيقي المسترجع
     let totalTripAmount = 0;
     
     if (listContainer) {
         listContainer.innerHTML = ""; // تصفير القائمة السابقة
 
         tripBookings.forEach((booking, index) => {
-            // جمع سعر حجز كل طالب مشترك في هذه الرحلة
-            // ملاحظة: لو الحقل عندك في Firestore اسمه amount غيري كلمة price هنا
-            const ticketPrice = Number(booking.price) || 25; 
+            // استخدام السعر الحقيقي المرتبط بالوجهة والذي تم حسابه في دالة التجميع
+            const ticketPrice = Number(booking.realPrice) || 25; 
             totalTripAmount += ticketPrice;
 
-            // بناء سطر الطالب داخل الـ Modal متوافق مع تصميمك الأنيق
+            // بناء سطر الطالب داخل الـ Modal متوافق مع التصميم
             const li = document.createElement("li");
             li.className = "list-group-item d-flex justify-content-between align-items-center text-end py-3";
             li.innerHTML = `
@@ -173,19 +189,17 @@ function showTripDetails(tripNumber, tripBookings, tripSummary) {
         });
     }
 
-    // 💵 طباعة إجمالي المبلغ النهائي المحسوب
+    // 💵 طباعة إجمالي المبلغ النهائي المحسوب بدقة
     if (amountElem) {
         amountElem.textContent = totalTripAmount;
     }
 
-    // 🛠️ الطريقة الاحترافية والأكثر أماناً لفتح الـ Modal في Bootstrap 5 لتجنب الـ Illegal invocation
-    // نبحث أولاً إذا كان الـ Modal مفتوح وله Instance جاهز، لو ملوش بنعمل واحد جديد
+    // فتح الـ Modal بأسلوب الـ Bootstrap 5 الآمن
     let myModal = bootstrap.Modal.getInstance(modalElement);
     if (!myModal) {
         myModal = new bootstrap.Modal(modalElement);
     }
     
-    // إظهار النافذة
     myModal.show();
 }
 
